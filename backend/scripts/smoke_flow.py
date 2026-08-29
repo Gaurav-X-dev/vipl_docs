@@ -174,7 +174,34 @@ IMPORT_HEADERS = [
 ]
 
 
-def run(base: str, investigator: str, office: str, password: str) -> int:
+def admin_from_env() -> tuple[str, str]:
+    """Read the deployment's own Super Admin out of backend/.env.
+
+    Hard-coding the development account meant this script failed on the first
+    real deployment at step one, which is the least useful place for a check
+    to stop.
+    """
+    env = BACKEND_ROOT / ".env"
+    email = "admin@investigation.local"
+    password = "Admin@123456"
+    if env.exists():
+        for line in env.read_text(encoding="utf-8").splitlines():
+            key, _, value = line.partition("=")
+            if key.strip() == "SUPER_ADMIN_EMAIL" and value.strip():
+                email = value.strip()
+            elif key.strip() == "SUPER_ADMIN_PASSWORD" and value.strip():
+                password = value.strip()
+    return email, password
+
+
+def run(
+    base: str,
+    investigator: str,
+    office: str,
+    password: str,
+    admin_email: str,
+    admin_password: str,
+) -> int:
     flow = Flow(base)
     tag = uuid.uuid4().hex[:6].upper()
     subject = f"Smoke Subject {tag}"
@@ -183,7 +210,7 @@ def run(base: str, investigator: str, office: str, password: str) -> int:
     print("=" * 66)
 
     # -- 1. Admin -----------------------------------------------------------
-    admin = flow.login("admin@investigation.local", "Admin@123456")
+    admin = flow.login(admin_email, admin_password)
     if not admin:
         print("\nCannot continue without the admin account.")
         return 1
@@ -518,8 +545,18 @@ def main() -> int:
     )
     parser.add_argument("--office", default="priyanka.singh@investigation.local")
     parser.add_argument("--password", default="Demo@123456")
+    env_email, env_password = admin_from_env()
+    parser.add_argument("--admin", default=env_email)
+    parser.add_argument("--admin-password", default=env_password)
     args = parser.parse_args()
-    return run(args.base, args.investigator, args.office, args.password)
+    return run(
+        args.base,
+        args.investigator,
+        args.office,
+        args.password,
+        args.admin,
+        args.admin_password,
+    )
 
 
 if __name__ == "__main__":
