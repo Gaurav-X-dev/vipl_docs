@@ -1,0 +1,16 @@
+line-length = 100
+target-version = "py312"
+
+[lint]
+select = ["E", "F", "W", "I", "UP", "B", "C4", "SIM"]
+ignore = [
+    "E501",   # long lines are handled by the formatter
+    "B008",   # FastAPI dependencies are called in defaults by design
+    "SIM108", # ternaries are not always clearer here
+]
+
+[lint.per-file-ignores]
+"app/seeds/*" = ["E402", "F401"]
+"tests/*" = ["E402"]
+"scripts/*" = ["E402"]
+"alembic/*" = ["E402"]

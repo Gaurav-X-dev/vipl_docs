@@ -1,0 +1,49 @@
+# --------------------------------------------------------------- Secrets
+# Never committed, private repository or not. `backend/.env.example` carries
+# the shape; the real values live on the machine that runs the app.
+.env
+backend/.env
+frontend/.env
+*.pem
+*.key
+
+# ------------------------------------------------------------ Python build
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+backend/.venv/
+backend/.test-tmp/
+backend/migration-check.db
+
+# The working database is rebuilt from the migrations and the seed, so it is
+# noise in a diff. The dated backups are kept — see below.
+backend/vipl_dev.db
+backend/vipl_dev.db-journal
+backend/vipl_dev.db-wal
+backend/vipl_dev.db-shm
+
+# ---------------------------------------------------------- Frontend build
+frontend/node_modules/
+frontend/dist/
+frontend/*.tsbuildinfo
+
+# ------------------------------------------------------------------- Logs
+# Regenerated on every run and, with SQL echo on, they reach tens of
+# megabytes within a day.
+logs/*.log
+*.log
+
+# ------------------------------------------------------- Runtime uploads
+# Evidence, generated reports and uploaded spreadsheets belong to whichever
+# installation produced them, not to the source tree.
+storage/imports/**
+storage/case_documents/**
+storage/generated_documents/**
+!storage/**/.gitkeep
+
+# ---------------------------------------------------------------- OS junk
+.DS_Store
+Thumbs.db
+desktop.ini

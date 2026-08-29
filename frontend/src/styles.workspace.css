@@ -1,0 +1,812 @@
+/* Dynamic company-wise navigation, the attendance clock, and the screens
+   that hang off them. Kept in its own file so the original stylesheet stays
+   the record of the base layout. */
+
+/* ------------------------------------------------- Sidebar: company tree */
+.sidebar nav {
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  flex: 1;
+  min-height: 0;
+  padding: 4px 0 12px;
+}
+.sidebar nav::-webkit-scrollbar {
+  width: 6px;
+}
+.sidebar nav::-webkit-scrollbar-thumb {
+  background: #ffffff1f;
+  border-radius: 3px;
+}
+
+.nav-branch .nav-count {
+  margin-left: auto;
+}
+.nav-branch .nav-count + .chevron {
+  margin-left: 8px;
+}
+
+.nav-count,
+.nav-leaf em,
+.nav-form em {
+  font-style: normal;
+  font-size: 11.5px;
+  font-weight: 700;
+  padding: 1px 7px;
+  border-radius: 999px;
+  background: #ffffff1f;
+  color: #dbeafe;
+  margin-left: auto;
+  line-height: 1.6;
+}
+
+.nav-tree {
+  padding-top: 14px;
+}
+.nav-branch {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  padding: 10px 12px;
+  border: 0;
+  background: transparent;
+  border-radius: 8px;
+  color: var(--on-dark-3);
+  font-size: 13.5px;
+  font-weight: 600;
+  text-align: left;
+}
+.nav-branch:hover {
+  background: #ffffff12;
+  color: #fff;
+}
+.nav-branch .chevron {
+  width: 15px;
+  height: 15px;
+  margin-left: auto;
+  transition: transform 0.18s ease;
+  opacity: 0.65;
+}
+.nav-branch.open .chevron {
+  transform: rotate(90deg);
+  opacity: 0.9;
+}
+.nav-branch svg:not(.chevron) {
+  width: 16px;
+}
+
+.nav-children {
+  margin: 2px 0 6px 14px;
+  padding-left: 10px;
+  border-left: 1px solid #ffffff1a;
+}
+.nav-leaf {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 10px;
+  margin: 1px 0;
+  border-radius: 10px;
+  font-size: 13px;
+  color: var(--on-dark-3);
+}
+.nav-leaf span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.nav-leaf:hover {
+  background: #ffffff12;
+  color: #fff;
+}
+.nav-leaf.active {
+  background: #fff;
+  color: var(--brand-950);
+  font-weight: 700;
+  box-shadow: 0 6px 14px rgba(0, 0, 0, 0.16);
+}
+.nav-leaf.active em {
+  background: var(--brand-100);
+  color: var(--brand-800);
+}
+
+
+/* ------------------------------------------------------- Clock in / out */
+.clock-widget {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 5px 6px 5px 12px;
+  margin-right: 14px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--surface-2);
+}
+.clock-widget.live {
+  border-color: var(--ok-line);
+  background: #eefaf5;
+}
+.clock-read {
+  display: flex;
+  flex-direction: column;
+  line-height: 1.15;
+}
+.clock-read b {
+  font: 700 15px Inter, sans-serif;
+  letter-spacing: -0.02em;
+  color: var(--navy);
+  font-variant-numeric: tabular-nums;
+}
+.clock-read small {
+  font-size: 11.5px;
+  color: var(--muted);
+}
+.clock-widget.live .clock-read small {
+  color: var(--ok);
+  font-weight: 600;
+}
+.clock-button {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  border: 0;
+  border-radius: 8px;
+  padding: 8px 12px;
+  font-size: 12.5px;
+  font-weight: 600;
+  color: #fff;
+}
+.clock-button svg {
+  width: 15px;
+  height: 15px;
+}
+.clock-button.in {
+  background: var(--teal);
+}
+.clock-button.in:hover {
+  background: #108266;
+}
+.clock-button.out {
+  background: #c2603b;
+}
+.clock-button.out:hover {
+  background: #a94f2e;
+}
+.clock-button:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+/* ------------------------------------------------------ Shared fragments */
+.stat-strip {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: 14px;
+  margin-bottom: 18px;
+}
+.stat-tile {
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--r-lg);
+  padding: 18px 20px;
+  box-shadow: var(--shadow);
+  transition: 0.16s ease;
+}
+.stat-tile:hover {
+  border-color: #cddbea;
+  transform: translateY(-1px);
+}
+.stat-tile b {
+  display: block;
+  font: 700 28px/1.05 Inter, sans-serif;
+  letter-spacing: -0.03em;
+  color: var(--ink);
+  font-variant-numeric: tabular-nums;
+}
+.stat-tile span {
+  display: block;
+  font-size: 12.5px;
+  font-weight: 500;
+  color: var(--ink-3);
+  margin-top: 4px;
+}
+.stat-tile.good b {
+  color: var(--ok);
+}
+.stat-tile.warn b {
+  color: var(--warn);
+}
+
+.pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 2px 9px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 600;
+  border: 1px solid var(--line);
+  background: #f4f7f9;
+  color: var(--muted);
+  white-space: nowrap;
+}
+.pill.on {
+  background: var(--ok-bg);
+  border-color: var(--ok-line);
+  color: var(--ok);
+}
+.pill.off {
+  background: #f4f6f7;
+  border-color: #dfe5e9;
+  color: #7b8b96;
+}
+.pill.lock {
+  background: var(--warn-bg);
+  border-color: var(--warn-line);
+  color: var(--warn);
+}
+.pill.stage {
+  background: var(--info-bg);
+  border-color: var(--brand-line);
+  color: var(--brand-800);
+}
+
+.dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: currentColor;
+  display: inline-block;
+}
+
+/* -------------------------------------------------------- Stage timeline */
+.stage-track {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  align-items: stretch;
+  margin-bottom: 6px;
+}
+.stage-step {
+  flex: 1 1 200px;
+  border: 1px solid var(--line);
+  border-left: 3px solid #dfe7eb;
+  border-radius: 10px;
+  padding: 12px 14px;
+  background: #fbfcfd;
+}
+.stage-step.done {
+  border-left-color: var(--teal);
+  background: #f4fbf8;
+}
+.stage-step.current {
+  border-left-color: #2b7fb5;
+  background: #f2f8fc;
+  box-shadow: 0 0 0 1px var(--brand-line) inset;
+}
+.stage-step small {
+  display: block;
+  font-size: 11.5px;
+  letter-spacing: 1px;
+  text-transform: uppercase;
+  color: var(--muted);
+  font-weight: 700;
+}
+.stage-step b {
+  display: block;
+  font-size: 14px;
+  color: var(--navy);
+  margin: 3px 0 2px;
+}
+.stage-step span {
+  font-size: 11.5px;
+  color: var(--muted);
+}
+
+/* --------------------------------------------------- Assignment picker */
+.assign-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  max-height: 420px;
+  overflow-y: auto;
+}
+.assign-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 11px 13px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: #fff;
+  text-align: left;
+  width: 100%;
+}
+.assign-row:hover {
+  border-color: #a9cbe0;
+  background: #f7fbfd;
+}
+.assign-row.picked {
+  border-color: var(--teal);
+  background: var(--ok-bg);
+  box-shadow: 0 0 0 1px var(--teal) inset;
+}
+.assign-row .who {
+  flex: 1;
+  min-width: 0;
+}
+.assign-row .who b {
+  display: block;
+  font-size: 13.5px;
+  color: var(--navy);
+}
+.assign-row .who small {
+  font-size: 11px;
+  color: var(--muted);
+}
+.assign-row .load {
+  display: flex;
+  gap: 14px;
+  text-align: center;
+}
+.assign-row .load div {
+  min-width: 46px;
+}
+.assign-row .load b {
+  display: block;
+  font: 700 14px Inter, sans-serif;
+  letter-spacing: -0.02em;
+  color: var(--navy);
+}
+.assign-row .load small {
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.6px;
+  color: var(--muted);
+}
+.assign-badges {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  align-items: flex-end;
+}
+
+/* ---------------------------------------------------------- Locked data */
+.locked-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 11px 0;
+  border-bottom: 1px solid var(--line);
+}
+.locked-row:last-child {
+  border-bottom: 0;
+}
+.locked-row .key {
+  flex: 0 0 240px;
+  font-size: 12.5px;
+  color: var(--muted);
+}
+.locked-row .val {
+  flex: 1;
+  font-size: 13.5px;
+  color: #182838;
+  word-break: break-word;
+}
+.locked-row .val s {
+  color: #a4b2bc;
+  margin-right: 8px;
+}
+.locked-note {
+  display: block;
+  font-size: 11px;
+  color: var(--warn);
+  margin-top: 3px;
+}
+
+/* ------------------------------------------------------- Activity feed */
+.activity-feed {
+  display: flex;
+  flex-direction: column;
+}
+.activity-line {
+  display: flex;
+  gap: 14px;
+  padding: 10px 0;
+  border-bottom: 1px solid var(--line);
+}
+.activity-line:last-child {
+  border-bottom: 0;
+}
+.activity-line time {
+  flex: 0 0 128px;
+  font-size: 11.5px;
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+}
+.activity-line .body {
+  flex: 1;
+  min-width: 0;
+}
+.activity-line .body b {
+  font-size: 13px;
+  color: var(--navy);
+}
+.activity-line .body span {
+  display: block;
+  font-size: 12.5px;
+  color: #45596a;
+}
+.activity-line .body small {
+  font-size: 11px;
+  color: var(--muted);
+}
+
+@media (max-width: 900px) {
+  .clock-widget {
+    margin-right: 8px;
+    padding-left: 8px;
+  }
+  .clock-button span {
+    display: none;
+  }
+  .clock-button {
+    padding: 8px;
+  }
+  .locked-row {
+    flex-direction: column;
+    gap: 3px;
+  }
+  .locked-row .key {
+    flex: none;
+  }
+  .activity-line {
+    flex-direction: column;
+    gap: 2px;
+  }
+}
+
+/* ------------------------------------------------- Import commit options */
+.import-options {
+  display: grid;
+  gap: 6px;
+  padding: 14px 16px;
+  margin: 14px 0 4px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--surface-2);
+}
+.import-options small {
+  font-size: 12.5px;
+  color: var(--muted);
+  line-height: 1.55;
+  max-width: 78ch;
+}
+
+/* ------------------------------------------- Missing required fields
+   A long insurer report can carry 200 fields. Naming the empty ones is not
+   enough — the banner links straight to each, and the field itself is marked
+   so it is obvious once you land on it. */
+.banner.danger {
+  border-left: 3px solid var(--alert);
+  background: #fdf0ee;
+}
+.banner.danger b {
+  color: var(--alert);
+}
+.missing-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 7px;
+  margin-top: 9px;
+}
+.missing-chip {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 1px;
+  padding: 6px 11px;
+  border: 1px solid #e6bdb7;
+  border-radius: 8px;
+  background: #fff;
+  color: var(--alert);
+  font-size: 12.5px;
+  font-weight: 600;
+  text-align: left;
+}
+.missing-chip small {
+  font-size: 11.5px;
+  font-weight: 500;
+  color: #a8756e;
+}
+.missing-chip:hover {
+  border-color: #c2695f;
+  background: #fff6f4;
+}
+.dynamic-form label.field-missing > span {
+  color: var(--alert);
+  font-weight: 700;
+}
+.dynamic-form label.field-missing input,
+.dynamic-form label.field-missing select,
+.dynamic-form label.field-missing textarea {
+  border-color: #d08a82;
+  background: #fffafa;
+}
+.dynamic-form label.field-missing input:focus,
+.dynamic-form label.field-missing select:focus,
+.dynamic-form label.field-missing textarea:focus {
+  border-color: var(--alert);
+  box-shadow: 0 0 0 3px rgba(179, 69, 60, 0.15);
+}
+
+/* --------------------------------------------------- Evidence capture
+   Camera first: an investigator at the door should not have to leave the
+   app to photograph what they came to photograph. */
+.capture-switch {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 6px;
+  padding: 5px;
+  margin-bottom: 14px;
+  background: var(--line-soft);
+  border-radius: 12px;
+}
+.capture-switch button {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  border: 0;
+  border-radius: 9px;
+  padding: 10px 12px;
+  background: transparent;
+  color: var(--muted);
+  font-size: 13.5px;
+  font-weight: 600;
+}
+.capture-switch button.active {
+  background: #fff;
+  color: var(--brand-700);
+  box-shadow: 0 1px 3px rgba(15, 23, 42, 0.12);
+}
+
+.capture-stage {
+  position: relative;
+  display: grid;
+  place-items: center;
+  gap: 12px;
+  min-height: 230px;
+  padding: 14px;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  background: #0e1b2b;
+  overflow: hidden;
+}
+.capture-stage video,
+.capture-stage img {
+  width: 100%;
+  max-height: 320px;
+  object-fit: contain;
+  border-radius: 10px;
+  background: #06101b;
+}
+.capture-hint,
+.capture-error {
+  display: grid;
+  justify-items: center;
+  gap: 7px;
+  color: var(--on-dark-2);
+  font-size: 13px;
+  text-align: center;
+  padding: 18px;
+}
+.capture-error b {
+  color: #fff;
+  font-size: 14.5px;
+}
+.capture-error span {
+  color: #9fb8d0;
+  max-width: 42ch;
+}
+.capture-error svg {
+  width: 26px;
+  height: 26px;
+  color: #e8b45c;
+}
+.capture-file {
+  display: grid;
+  justify-items: center;
+  gap: 5px;
+  color: var(--on-dark-2);
+  padding: 30px 18px;
+}
+.capture-file svg {
+  width: 30px;
+  height: 30px;
+  color: var(--brand-300, var(--brand-300, #7fb6dd));
+}
+.capture-file b {
+  color: #fff;
+  word-break: break-all;
+  text-align: center;
+}
+.capture-file small {
+  color: var(--on-dark-5);
+}
+
+.capture-actions {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+.shutter {
+  width: 58px;
+  height: 58px;
+  border-radius: 50%;
+  border: 4px solid #ffffff2e;
+  background: #fff;
+  color: var(--brand-800);
+  display: grid;
+  place-items: center;
+}
+.shutter svg {
+  width: 24px;
+  height: 24px;
+}
+.shutter:hover:not(:disabled) {
+  transform: scale(1.05);
+}
+.shutter:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+.capture-clear {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  border: 0;
+  border-radius: 8px;
+  padding: 7px 11px;
+  background: #0b1622cc;
+  color: #fff;
+  font-size: 12.5px;
+  font-weight: 600;
+  backdrop-filter: blur(4px);
+}
+.capture-clear:hover {
+  background: #0b1622;
+}
+
+.file-drop {
+  display: grid;
+  justify-items: center;
+  gap: 5px;
+  width: 100%;
+  padding: 40px 20px;
+  border: 2px dashed #34506b;
+  border-radius: 12px;
+  background: transparent;
+  color: var(--on-dark-2);
+}
+.file-drop svg {
+  width: 30px;
+  height: 30px;
+  color: var(--brand-300, var(--brand-300, #7fb6dd));
+}
+.file-drop b {
+  color: #fff;
+  font-size: 14.5px;
+}
+.file-drop small {
+  color: var(--on-dark-5);
+  font-size: 12px;
+}
+.file-drop:hover {
+  border-color: var(--brand-500);
+  background: #ffffff08;
+}
+
+.geo-strip {
+  display: flex;
+  align-items: center;
+  gap: 11px;
+  margin: 14px 0 4px;
+  padding: 11px 14px;
+  border: 1px solid var(--line);
+  border-radius: 11px;
+  background: var(--surface-2);
+}
+.geo-strip.found {
+  border-color: var(--ok-line);
+  background: var(--ok-bg);
+}
+.geo-strip > svg {
+  width: 19px;
+  height: 19px;
+  color: var(--muted);
+  flex: none;
+}
+.geo-strip.found > svg {
+  color: var(--teal);
+}
+.geo-strip span {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+.geo-strip b {
+  font-size: 13px;
+  color: var(--ink);
+  font-variant-numeric: tabular-nums;
+}
+.geo-strip small {
+  font-size: 11.5px;
+  color: var(--muted);
+}
+.geo-ok {
+  color: var(--teal);
+  flex: none;
+}
+
+
+/* ------------------------------------------------ Sidebar: the form list
+   Every form on one flat list, named the way the agency names it, with the
+   client underneath. Nesting these under company headings left most rows
+   childless and buried the two or three that were not. */
+.nav-form {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 7px 10px;
+  margin: 1px 0;
+  border-radius: 10px;
+  color: var(--on-dark-3);
+  min-width: 0;
+}
+.nav-form span {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  line-height: 1.25;
+}
+.nav-form b {
+  font-size: 12.5px;
+  font-weight: 600;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.nav-form small {
+  font-size: 11.5px;
+  color: var(--on-dark-4);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.nav-form em {
+  margin-left: auto;
+}
+.nav-form:hover {
+  background: #ffffff12;
+  color: #fff;
+}
+.nav-form:hover small {
+  color: var(--on-dark-3);
+}
+.nav-form.active {
+  background: #fff;
+  color: var(--brand-950);
+  box-shadow: 0 6px 14px rgba(0, 0, 0, 0.16);
+}
+.nav-form.active small {
+  color: var(--brand-700);
+}
+.nav-form.active em {
+  background: var(--brand-100);
+  color: var(--brand-800);
+}

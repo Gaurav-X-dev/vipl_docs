@@ -1,0 +1,37 @@
+# ---------------------------------------------------------------------------
+# Investigation & Death Claim Case Management System - backend requirements
+# Pinned with lower bounds; see requirements.lock.txt for the exact resolved
+# versions this project was verified against.
+# ---------------------------------------------------------------------------
+
+# --- Web framework ---
+fastapi>=0.118
+uvicorn[standard]>=0.38
+python-multipart>=0.0.20
+
+# --- Data / ORM ---
+sqlalchemy[asyncio]>=2.0.40
+asyncpg>=0.30
+alembic>=1.14
+greenlet>=3.1
+
+# --- Validation / settings ---
+pydantic>=2.10
+pydantic-settings>=2.7
+email-validator>=2.2
+
+# --- Security ---
+argon2-cffi>=23.1
+PyJWT>=2.9
+
+# --- Spreadsheets ---
+openpyxl>=3.1.5
+
+# --- Documents ---
+python-docx>=1.1.2
+docxtpl>=0.19
+reportlab>=4.2
+
+# --- Utilities ---
+python-dateutil>=2.9
+tzdata>=2025.2
