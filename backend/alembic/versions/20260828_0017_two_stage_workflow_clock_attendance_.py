@@ -106,7 +106,9 @@ def upgrade() -> None:
     # Everything the client supplied is locked retroactively, so cases that
     # were imported before this release get the same protection as new ones.
     op.execute(
-        "UPDATE case_field_values SET is_locked = 1 "
+        # `true`, not `1`: SQLite treats them alike, PostgreSQL does not, and
+        # a migration has to run on both.
+        "UPDATE case_field_values SET is_locked = true "
         "WHERE source = 'BANK_SUPPLIED'"
     )
     # Only the newest assignment per case is still live; the rest are history.
