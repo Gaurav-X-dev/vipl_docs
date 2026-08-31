@@ -40,7 +40,21 @@ from app.utils.files import (
 from app.utils.text import safe_filename, slugify
 
 #: Cases must be at least verified before the client form can be produced.
-GENERATION_READY_STATUSES = {CaseStatus.VERIFIED, CaseStatus.COMPLETED}
+#: When the client's form may be produced.
+#:
+#: The real gate is the investigator having finished: a report generated from
+#: an unworked case is a blank form with a letterhead. Waiting for Verified was
+#: stricter than that and stopped the office staff doing the very job the
+#: stage exists for — preparing the report before it is reviewed.
+GENERATION_READY_STATUSES = {
+    CaseStatus.REPORT_SUBMITTED,
+    CaseStatus.AWAITING_OFFICE_ASSIGNMENT,
+    CaseStatus.OFFICE_PROCESSING,
+    CaseStatus.UNDER_REVIEW,
+    CaseStatus.QUALITY_CHECK,
+    CaseStatus.VERIFIED,
+    CaseStatus.COMPLETED,
+}
 
 
 # --------------------------------------------------------------------------- #
@@ -188,8 +202,8 @@ async def generate_document(
     """
     if case.status not in GENERATION_READY_STATUSES and not force:
         raise ConflictError(
-            "The client form can only be generated once the case is verified or "
-            f"completed. This case is {status_label(case.status)}.",
+            "The client form can only be generated once the investigator has "
+            f"submitted the case. This one is {status_label(case.status)}.",
         )
 
     template = await active_template(session, case.company_id, case.case_type_id)

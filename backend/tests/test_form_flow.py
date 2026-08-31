@@ -303,6 +303,72 @@ class TestFormFlow:
         )
         assert refused.status_code == 409, refused.text
 
+    async def test_the_office_can_produce_the_report_it_is_preparing(
+        self, client: AsyncClient, admin_headers
+    ):
+        """Generation used to wait for Verified, which is too late.
+
+        Preparing the report is the office stage's whole purpose, so the
+        client form has to be produceable there. The gate that matters is the
+        investigator having finished, not the reviewer having approved.
+        """
+        case = await self._case_with_form(client, admin_headers, "Office Report")
+        case_id = case["id"]
+
+        # Before the investigator submits, there is nothing to produce.
+        too_early = await client.post(
+            f"{API}/cases/{case_id}/generate",
+            json={"output_format": "PDF"},
+            headers=admin_headers,
+        )
+        assert too_early.status_code == 409, too_early.text
+        assert "submitted" in too_early.text
+
+        form = await client.get(f"{API}/cases/{case_id}/form", headers=admin_headers)
+        values: dict[str, str] = {}
+        for section in form.json()["template"]["sections"]:
+            for field in section["fields"]:
+                if not field["is_required"]:
+                    continue
+                mapping = field.get("document_mapping")
+                if mapping == "outcome":
+                    values[field["field_key"]] = "Positive"
+                elif mapping == "report_status":
+                    values[field["field_key"]] = "Final"
+                elif field["field_type"] == "DATE":
+                    values[field["field_key"]] = "2026-08-28"
+                elif field["field_type"] in {"SELECT", "RADIO"}:
+                    values[field["field_key"]] = str((field.get("options") or ["Yes"])[0])
+                elif field["field_type"] == "YES_NO_NA":
+                    values[field["field_key"]] = "YES"
+                else:
+                    values[field["field_key"]] = "Recorded during the visit"
+
+        submitted = await client.put(
+            f"{API}/cases/{case_id}/form",
+            json={"values": values, "submit": True},
+            headers=admin_headers,
+        )
+        assert submitted.status_code == 200, submitted.text
+
+        me = await client.get(f"{API}/auth/me", headers=admin_headers)
+        assigned = await client.post(
+            f"{API}/cases/{case_id}/assign-office",
+            json={"office_staff_id": me.json()["id"]},
+            headers=admin_headers,
+        )
+        assert assigned.status_code == 200, assigned.text
+
+        detail = await client.get(f"{API}/cases/{case_id}", headers=admin_headers)
+        assert detail.json()["status"] == CaseStatus.OFFICE_PROCESSING.value
+
+        produced = await client.post(
+            f"{API}/cases/{case_id}/generate",
+            json={"output_format": "PDF"},
+            headers=admin_headers,
+        )
+        assert produced.status_code == 201, produced.text
+
 
 class TestAttendanceAcrossSessions:
     """A second shift in one day must not blow up on mixed timestamps.

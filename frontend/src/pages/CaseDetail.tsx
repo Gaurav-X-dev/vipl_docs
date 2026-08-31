@@ -2,6 +2,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   ArrowLeft,
   Building2,
+  CheckCircle2,
   Download,
   FileDown,
   FileText,
@@ -15,7 +16,7 @@ import {
   UploadCloud,
   UserRoundCheck,
 } from "lucide-react";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import { api, download, errorMessage } from "../api";
 import { useAuth } from "../auth";
@@ -117,6 +118,13 @@ export default function CaseDetail() {
     | "reopen"
     | null
   >(null);
+  const [presetStatus, setPresetStatus] = useState("");
+
+  /** Open the status dialog with one step already chosen. */
+  function openStatus(target: string) {
+    setPresetStatus(target);
+    setDialog("status");
+  }
 
   const detail = useQuery({
     queryKey: ["case", id],
@@ -245,9 +253,13 @@ export default function CaseDetail() {
               </>
             )}
             {canReview &&
-              ["REPORT_SUBMITTED", "OFFICE_PROCESSING", "UNDER_REVIEW"].includes(
-                c.status,
-              ) && (
+              [
+                "REPORT_SUBMITTED",
+                "AWAITING_OFFICE_ASSIGNMENT",
+                "OFFICE_PROCESSING",
+                "UNDER_REVIEW",
+                "QUALITY_CHECK",
+              ].includes(c.status) && (
                 <button className="primary" onClick={() => setDialog("review")}>
                   Review report
                 </button>
@@ -273,6 +285,25 @@ export default function CaseDetail() {
                   <Send /> Submit to office
                 </button>
               )}
+            {/* The office staff's own hand-off. Without this their only
+                route onward was the status badge, which does not look like a
+                button. */}
+            {can("case.process_office") && c.status === "OFFICE_PROCESSING" && (
+              <button
+                className="primary"
+                onClick={() => openStatus("UNDER_REVIEW")}
+              >
+                <Send /> Send for review
+              </button>
+            )}
+            {can("case.complete") && c.status === "VERIFIED" && (
+              <button
+                className="primary"
+                onClick={() => openStatus("COMPLETED")}
+              >
+                <CheckCircle2 /> Mark completed
+              </button>
+            )}
             {can("case.edit") &&
               ["COMPLETED", "REJECTED", "CANCELLED"].includes(c.status) && (
                 <button className="primary" onClick={() => setDialog("reopen")}>
@@ -422,7 +453,11 @@ export default function CaseDetail() {
         caseId={id}
         allowed={c.allowed_transitions}
         currentOutcome={c.outcome}
-        onClose={() => setDialog(null)}
+        preset={presetStatus}
+        onClose={() => {
+          setPresetStatus("");
+          setDialog(null);
+        }}
         onDone={invalidate}
       />
       <ReviewDialog
@@ -1470,6 +1505,7 @@ function StatusDialog({
   caseId,
   allowed,
   currentOutcome,
+  preset,
   onClose,
   onDone,
 }: {
@@ -1477,11 +1513,19 @@ function StatusDialog({
   caseId: string;
   allowed: string[];
   currentOutcome?: string;
+  /** Chosen for the user when a named action opened this dialog. */
+  preset?: string;
   onClose: () => void;
   onDone: () => void;
 }) {
   const toast = useToast();
   const [status, setStatus] = useState("");
+
+  // The dialog is mounted once and reopened, so the preset has to be applied
+  // each time rather than only as an initial value.
+  useEffect(() => {
+    if (open) setStatus(preset ?? "");
+  }, [open, preset]);
   const [comment, setComment] = useState("");
   const [outcome, setOutcome] = useState(currentOutcome ?? "");
   const [reportStatus, setReportStatus] = useState("");
