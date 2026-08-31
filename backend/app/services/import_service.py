@@ -31,6 +31,7 @@ from app.models.company import CaseType, Company
 from app.models.enums import (
     CLOSED_STATUSES,
     AuditAction,
+    CATEGORY_LABELS,
     CaseCategory,
     CasePriority,
     CaseStatus,
@@ -43,7 +44,7 @@ from app.models.importing import ImportBatch, ImportColumnMapping, ImportRow, Im
 from app.models.user import User
 from app.schemas.case import CaseCreate
 from app.services import audit_service, case_service, notification_service
-from app.utils.dates import start_of_day, utcnow
+from app.utils.dates import detect_month_first, start_of_day, utcnow
 from app.utils.files import (
     build_stored_name,
     dated_subdir,
@@ -203,6 +204,7 @@ async def upload_and_validate(
     template_id: uuid.UUID | None,
     company_id: uuid.UUID | None,
     actor: User,
+    category: CaseCategory | None = None,
     mapping_overrides: dict[str, str | None] | None = None,
     request: Request | None = None,
 ) -> tuple[ImportBatch, ResolvedMapping, parser.ParsedSheet]:
@@ -275,7 +277,7 @@ async def upload_and_validate(
     session.add(batch)
     await session.flush()
 
-    await _validate_rows(session, batch, template, mapping, sheet)
+    await _validate_rows(session, batch, template, mapping, sheet, category)
 
     batch.status = ImportBatchStatus.VALIDATED
     batch.validated_at = utcnow()
@@ -306,9 +308,25 @@ async def _validate_rows(
     template: ImportTemplate,
     mapping: ResolvedMapping,
     sheet: parser.ParsedSheet,
+    category: CaseCategory | None = None,
 ) -> None:
     cache = ResolverCache()
     await cache.load(session)
+
+    # Which order this file writes its dates in, decided once from every date
+    # cell in it. Per-cell guessing reads 8/6/2026 as 8 June in an American
+    # sheet and silently moves the case two months.
+    column_types = {m.target_field: m.data_type for m in template.mappings}
+    date_headers = [
+        header
+        for header, target in mapping.header_to_field.items()
+        if target and column_types.get(target) == "date"
+    ]
+    month_first = detect_month_first(
+        raw.get(header)
+        for _, raw in parser.iter_rows(sheet)
+        for header in date_headers
+    )
 
     seen_in_file: dict[tuple[str, ...], int] = {}
     counts = {"valid": 0, "warning": 0, "error": 0, "duplicate": 0}
@@ -316,7 +334,7 @@ async def _validate_rows(
     for row_number, raw in parser.iter_rows(sheet):
         errors: list[str] = []
         warnings: list[str] = []
-        parsed = extract_row(raw, mapping, template)
+        parsed = extract_row(raw, mapping, template, month_first=month_first)
 
         if mapping.missing_required:
             errors.append(
@@ -336,6 +354,11 @@ async def _validate_rows(
             )
         elif not case_type.is_active:
             errors.append(f"Case type '{case_type.name}' is inactive.")
+        elif category is not None and case_type.category != category:
+            errors.append(
+                f"'{case_type.name}' is a {CATEGORY_LABELS[case_type.category]} case. "
+                f"Import it from the {CATEGORY_LABELS[case_type.category]} screen."
+            )
 
         name = clean(parsed.get("life_assured_name"))
         if not name:

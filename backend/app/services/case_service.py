@@ -47,6 +47,7 @@ from app.services.case_workflow import (
     allowed_transitions,
     assert_transition,
     compute_due_at,
+    may_set_status,
     status_after_assignment,
     status_label,
     tat_days_remaining,
@@ -560,6 +561,11 @@ async def assign_case(
 
     previous_status = case.status
     case.status = status_after_assignment(case.status)
+    # Assignment is now what starts the work, so it is also what stamps the
+    # start time — otherwise the case reads "Work in Progress" with no
+    # "Started" date beside it.
+    if case.status == CaseStatus.WIP and case.started_at is None:
+        case.started_at = now
 
     await close_stage_assignments(
         session,
@@ -671,6 +677,28 @@ def _case_link(case: Case) -> str:
 # --------------------------------------------------------------------------- #
 # Status transitions
 # --------------------------------------------------------------------------- #
+def assert_may_set_status(case: Case, target: CaseStatus, actor: User) -> None:
+    """Refuse a status change the actor is not entitled to make.
+
+    The endpoint asked only for ``case.view``, which meant an investigator
+    could take their own case straight to Completed and skip the office,
+    review and quality-check stages entirely. Permission is checked here
+    rather than on the route so that every path into ``change_status`` is
+    covered by the same rule.
+    """
+    if may_set_status(
+        target,
+        permission_codes=actor.permission_codes,
+        is_super_admin=actor.is_super_admin,
+        is_assignee=case.assigned_to_id == actor.id,
+        is_office_staff=case.office_staff_id == actor.id,
+    ):
+        return
+    raise PermissionDeniedError(
+        f"You are not allowed to move a case to {status_label(target)}."
+    )
+
+
 async def change_status(
     session: AsyncSession,
     case: Case,
@@ -685,6 +713,7 @@ async def change_status(
 ) -> Case:
     effective_outcome = outcome or case.outcome
     assert_transition(case.status, target, effective_outcome)
+    assert_may_set_status(case, target, actor)
 
     previous = case.status
     now = utcnow()
@@ -769,6 +798,26 @@ async def change_status(
             link=_case_link(case),
             entity_type="Case",
             entity_id=str(case.id),
+        )
+
+    # The review and quality-check steps hand the case back to "an admin"
+    # rather than to one named person, so the audience is everyone who is
+    # allowed to act on it. The actor is excluded: they just did the thing.
+    if target in {CaseStatus.UNDER_REVIEW, CaseStatus.QUALITY_CHECK}:
+        await notification_service.notify_permission_holders(
+            session,
+            permission="case.review",
+            notification_type=NotificationType.SYSTEM,
+            title=(
+                f"Case {case.case_number} is ready for review"
+                if target == CaseStatus.UNDER_REVIEW
+                else f"Case {case.case_number} sent to quality check"
+            ),
+            body=f"{case.company.short_name} — {case.life_assured_name}",
+            link=_case_link(case),
+            entity_type="Case",
+            entity_id=str(case.id),
+            exclude_user_id=actor.id,
         )
     return case
 

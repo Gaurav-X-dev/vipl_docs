@@ -369,10 +369,20 @@
 .notification-panel header {
   display: flex;
   align-items: center;
-  justify-content: space-between;
+  gap: 10px;
   padding: 12px 14px;
   border-bottom: 1px solid var(--line);
   font-size: 13px;
+}
+/* The title takes the slack so the sound toggle and "Mark all read" stay
+   together on the right; space-between would strand the toggle in the middle. */
+.notification-panel header > b {
+  margin-right: auto;
+}
+.notification-panel header .text-link svg {
+  width: 16px;
+  height: 16px;
+  display: block;
 }
 .notification-list {
   max-height: 380px;

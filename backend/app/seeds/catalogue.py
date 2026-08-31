@@ -120,6 +120,13 @@ CASE_TYPES: tuple[CaseTypeSeed, ...] = (
             "Pre Issuance Verification",
             "New Business",
             "Fresh",
+            # Aditya Birla's daily sheet splits the same verification into
+            # three labels of its own. They are one form, so they route here
+            # and the sheet's own wording stays visible on the Imported data
+            # tab.
+            "Project Verification",
+            "Physical Verification",
+            "Post Verification",
         ),
         display_order=10,
     ),

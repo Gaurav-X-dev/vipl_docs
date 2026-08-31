@@ -149,8 +149,9 @@ class TestReopen:
         )
         assert assigned.status_code == 200, assigned.text
 
+        # Assigning already lands the case in WIP, so the walk starts at the
+        # next desk rather than repeating a status it is in.
         for target in (
-            CaseStatus.WIP,
             CaseStatus.RIP,
             CaseStatus.REPORT_SUBMITTED,
             CaseStatus.UNDER_REVIEW,

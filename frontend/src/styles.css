@@ -1585,9 +1585,6 @@ td:has(.badge),
   .staff-grid {
     grid-template-columns: 1fr;
   }
-  .filters {
-    flex-direction: column;
-  }
   .search {
     max-width: none;
     flex: auto;

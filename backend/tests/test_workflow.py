@@ -18,12 +18,16 @@ from app.core.errors import WorkflowError
 from app.imports.mapping import resolve_mapping
 from app.models.enums import CaseStatus, TatState
 from app.services.case_workflow import (
+    STATUS_LABELS,
+    STATUS_TONE,
+    TRANSITIONS,
     aging_days,
     assert_transition,
     can_transition,
+    status_after_assignment,
     tat_state,
 )
-from app.utils.dates import parse_date, utcnow
+from app.utils.dates import detect_month_first, parse_date, utcnow
 
 API = settings.API_V1_PREFIX
 
@@ -103,6 +107,54 @@ class TestWorkflowRules:
             CaseStatus.RIP, CaseStatus.REPORT_SUBMITTED, CaseOutcome.NEGATIVE
         )
 
+    def test_assignment_starts_the_work(self):
+        """Handing a case to an investigator is the work starting.
+
+        The agency has no waiting room between the two, so both of the
+        statuses a fresh case can hold must land on WIP, and that hop has to
+        be legal in the transition table as well.
+        """
+        for start in (
+            CaseStatus.IMPORTED,
+            CaseStatus.UNASSIGNED,
+            CaseStatus.ASSIGNED,
+        ):
+            assert status_after_assignment(start) == CaseStatus.WIP
+
+        assert can_transition(CaseStatus.IMPORTED, CaseStatus.WIP)
+        assert can_transition(CaseStatus.UNASSIGNED, CaseStatus.WIP)
+
+    def test_assignment_leaves_live_work_alone(self):
+        for started in (CaseStatus.FIELD_INVESTIGATION, CaseStatus.RIP):
+            assert status_after_assignment(started) == started
+
+    def test_quality_check_is_an_optional_detour(self):
+        """The admin may complete straight away or route through QC first."""
+        # Straight through, without quality check.
+        assert can_transition(CaseStatus.UNDER_REVIEW, CaseStatus.VERIFIED)
+        # Or via quality check, which always hands the case back.
+        assert can_transition(CaseStatus.UNDER_REVIEW, CaseStatus.QUALITY_CHECK)
+        assert can_transition(CaseStatus.QUALITY_CHECK, CaseStatus.UNDER_REVIEW)
+        assert can_transition(CaseStatus.QUALITY_CHECK, CaseStatus.VERIFIED)
+        assert can_transition(
+            CaseStatus.QUALITY_CHECK, CaseStatus.CORRECTION_REQUIRED
+        )
+
+    def test_quality_check_cannot_skip_to_completed(self):
+        """Completion stays behind Verified, so nothing bypasses sign-off."""
+        with pytest.raises(WorkflowError):
+            assert_transition(CaseStatus.QUALITY_CHECK, CaseStatus.COMPLETED)
+
+    def test_office_stage_can_reach_quality_check(self):
+        assert can_transition(CaseStatus.OFFICE_PROCESSING, CaseStatus.QUALITY_CHECK)
+
+    def test_every_status_is_labelled_and_toned(self):
+        """A new status with no label renders as a raw enum name on screen."""
+        for status in CaseStatus:
+            assert status in STATUS_LABELS, f"{status} has no label"
+            assert status in STATUS_TONE, f"{status} has no badge tone"
+            assert status in TRANSITIONS, f"{status} is missing from TRANSITIONS"
+
     def test_tat_states(self):
         now = utcnow()
         assert tat_state(CaseStatus.WIP, now + timedelta(days=5), None, 24, now) == (
@@ -146,6 +198,32 @@ class TestDateParsing:
     )
     def test_day_first_parsing(self, raw, expected):
         assert parse_date(raw) == expected
+
+    def test_a_day_above_twelve_settles_the_order(self):
+        """One unambiguous cell decides the whole column.
+
+        The Aditya Birla sheet writes 8/24/2026. Read day-first that is not a
+        date at all, and the row was rejected; read per cell, its neighbour
+        8/6/2026 would have become 8 June instead of 6 August.
+        """
+        american = ["8/6/2026", "8/24/2026", "8/6/2026"]
+        assert detect_month_first(american) is True
+        assert parse_date("8/24/2026", month_first=True) == date(2026, 8, 24)
+        assert parse_date("8/6/2026", month_first=True) == date(2026, 8, 6)
+
+    def test_indian_sheets_stay_day_first(self):
+        indian = ["24-08-2026", "06-08-2026"]
+        assert detect_month_first(indian) is False
+        assert parse_date("24-08-2026") == date(2026, 8, 24)
+        assert parse_date("06-08-2026") == date(2026, 8, 6)
+
+    def test_ambiguous_column_keeps_the_default(self):
+        """With nothing above twelve, nothing has been proven."""
+        assert detect_month_first(["01/02/2026", "03/04/2026"]) is False
+
+    def test_contradictory_column_keeps_the_default(self):
+        """Both orders present means the file is inconsistent; do not guess."""
+        assert detect_month_first(["24/08/2026", "08/24/2026"]) is False
 
 
 # --------------------------------------------------------------------------- #
@@ -400,8 +478,12 @@ class TestAcceptanceScenario:
         assert assign.status_code == 200, assign.text
 
         after_assign = await client.get(f"{API}/cases/{case_id}", headers=admin_headers)
-        assert after_assign.json()["status"] == "ASSIGNED"
+        # Handing the case to an investigator is the work starting, so it goes
+        # straight to WIP rather than waiting in an Assigned state nobody acted
+        # on, and the start time is stamped at the same moment.
+        assert after_assign.json()["status"] == "WIP"
         assert after_assign.json()["assigned_to"]["id"] == investigator_user_id
+        assert after_assign.json()["started_at"] is not None
 
         # --- Steps 12-14: the investigator works the case -------------------
         login = await client.post(

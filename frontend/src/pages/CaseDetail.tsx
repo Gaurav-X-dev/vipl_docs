@@ -69,7 +69,7 @@ import {
   WorkflowTab,
 } from "../casestage";
 import { OfficeAssignDialog } from "../office";
-import { EvidenceDialog } from "../evidence";
+import { EvidenceDialog, PhotoUploadPanel } from "../evidence";
 
 /** Pull the server's list of empty required fields out of an API error. */
 function missingFields(error: unknown): MissingField[] {
@@ -476,6 +476,7 @@ export default function CaseDetail() {
 
 /* ------------------------------------------------------------ Overview */
 function OverviewTab({ c }: { c: CaseDetailType }) {
+  const { can } = useAuth();
   return (
     <div className="detail-grid">
       <Card title="Case information">
@@ -518,6 +519,12 @@ function OverviewTab({ c }: { c: CaseDetailType }) {
           </div>
         </div>
       </Card>
+
+      {can("document.upload") && (
+        <Card title="Photographs">
+          <PhotoUploadPanel caseId={c.id} />
+        </Card>
+      )}
 
       <Card title="Turn around time">
         <dl className="details">

@@ -16,7 +16,7 @@ from app.api.deps import (
     can_view_all_cases,
     require_permissions,
 )
-from app.core.errors import NotFoundError, ValidationError
+from app.core.errors import AppError, NotFoundError, ValidationError
 from app.core.pagination import Page, PageParams, page_params
 from app.models.audit import AuditLog, CaseTimelineEvent
 from app.models.case import Case, CaseAssignment, CaseDocument, CaseNote, CaseStatusHistory
@@ -669,7 +669,13 @@ async def bulk_status(
 ) -> Message:
     changed, skipped = 0, []
     for case_id in payload.case_ids:
-        case = await case_service.get_case(session, case_id)
+        # _load_case, not get_case: this used to skip the access check, so a
+        # user could bulk-change the status of cases they cannot even open.
+        try:
+            case = await _load_case(session, case_id, user)
+        except AppError as exc:
+            skipped.append(f"{case_id}: {exc}")
+            continue
         try:
             await case_service.change_status(
                 session,

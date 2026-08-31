@@ -209,8 +209,20 @@ cd /opt/vipl/backend
 .venv/bin/python -m scripts.retag_templates --confirm
 ```
 
-The last two turn the insurers' specimen forms into templates. Skip them and
-document generation will refuse to run.
+The last two turn the insurers' specimen forms into templates. **Skip them and
+the DOCX button fails on the first real case** with "has no tagged copy yet" —
+the service still starts, so nothing warns you until a client is watching.
+
+Then check the whole installation in one command:
+
+```bash
+.venv/bin/python -m scripts.doctor
+```
+
+It verifies the configuration, the storage directories and their ownership,
+the migration version, the seed, and — the one that has bitten this project —
+that every template has a tagged copy on disk. Each failure prints the command
+that fixes it. Do not go further until it reports no failures.
 
 ---
 
@@ -351,10 +363,23 @@ Or run the whole thing from the server in one go:
 
 ```bash
 cd /opt/vipl/backend
+.venv/bin/python -m scripts.doctor
 .venv/bin/python -m scripts.smoke_flow --base https://virtualinvestigation.xyz
 ```
 
 `0 failed` means the deployment is good.
+
+### Accounts
+
+The seed creates one Super Admin from `.env` and no staff, so a fresh
+production database has nobody to assign work to. Add accounts with:
+
+```bash
+.venv/bin/python -m scripts.create_super_admin   --email you@virtualinvestigation.xyz --password 'a-strong-one' --name "Your Name"
+```
+
+The same command repairs an existing account: it resets the password, restores
+the Super Admin role and clears a lockout from failed sign-ins.
 
 ---
 
@@ -369,6 +394,7 @@ cd /opt/vipl/backend
 - [ ] HTTPS enforced and renewing
 - [ ] `/opt/vipl` is outside `public_html`
 - [ ] A nightly backup of `investigation_db` and `/opt/vipl/storage`
+- [ ] `scripts.doctor` reports no failures
 
 Nightly database dump:
 
@@ -391,9 +417,26 @@ chmod +x /etc/cron.daily/vipl-backup
 
 ```bash
 cd /opt/vipl && git pull
-cd backend && .venv/bin/pip install -r requirements.txt \
-  && .venv/bin/python -m alembic upgrade head
+cd backend
+.venv/bin/pip install -r requirements.txt
+.venv/bin/python -m alembic upgrade head
+.venv/bin/python -m scripts.doctor          # before restarting, not after
 systemctl restart vipl
 cd ../frontend && npm ci && npm run build
 cp -r dist/* /home/$ACCT/public_html/
+chown -R $ACCT:$ACCT /home/$ACCT/public_html
+```
+
+If an update adds or changes an insurer form, re-run the tagging as well —
+`seed.py` registers the template, but only the tagging step produces the copy
+that document generation actually reads:
+
+```bash
+cd /opt/vipl/backend
+.venv/bin/python scripts/seed.py
+.venv/bin/python -m scripts.tag_templates
+.venv/bin/python -m scripts.retag_templates --confirm
+chown -R nobody:nobody /opt/vipl/storage
+systemctl restart vipl
+.venv/bin/python -m scripts.doctor
 ```

@@ -10,6 +10,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.enums import NotificationType
 from app.models.misc import Notification
+from app.models.user import User
 from app.utils.dates import utcnow
 
 
@@ -57,6 +58,47 @@ async def notify_many(
             link=link,
         )
     return len(unique_ids)
+
+
+async def notify_permission_holders(
+    session: AsyncSession,
+    *,
+    permission: str,
+    notification_type: NotificationType,
+    title: str,
+    body: str | None = None,
+    link: str | None = None,
+    entity_type: str | None = None,
+    entity_id: str | None = None,
+    exclude_user_id: uuid.UUID | None = None,
+) -> int:
+    """Notify every active account that is allowed to act on this step.
+
+    Stages that hand work back to "the office" or "an admin" have no single
+    owner to address, so the audience is defined by what people are permitted
+    to do rather than by a column on the case. Super Admins always qualify.
+    """
+    result = await session.execute(
+        select(User).where(User.is_active.is_(True), User.login_enabled.is_(True))
+    )
+    sent = 0
+    for account in result.scalars().all():
+        if account.id == exclude_user_id:
+            continue
+        if not (account.is_super_admin or permission in account.permission_codes):
+            continue
+        await notify(
+            session,
+            user_id=account.id,
+            notification_type=notification_type,
+            title=title,
+            body=body,
+            link=link,
+            entity_type=entity_type,
+            entity_id=entity_id,
+        )
+        sent += 1
+    return sent
 
 
 async def list_for_user(

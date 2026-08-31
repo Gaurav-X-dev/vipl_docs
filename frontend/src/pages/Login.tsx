@@ -7,7 +7,10 @@ import { useAuth } from "../auth";
 export default function Login() {
   const { login } = useAuth();
   const navigate = useNavigate();
-  const [email, setEmail] = useState("admin@investigation.local");
+  // Empty, not the development seed account: a pre-filled address is a
+  // credential hint on a public sign-in page, and it sent real users to
+  // an account that does not exist on the production database.
+  const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [show, setShow] = useState(false);
   const [remember, setRemember] = useState(false);
@@ -70,6 +73,12 @@ export default function Login() {
               value={email}
               onChange={(e) => setEmail(e.target.value)}
               autoComplete="username"
+              // The field is empty on load, so put the caret in it and keep a
+              // phone keyboard from capitalising the first letter.
+              autoFocus
+              autoCapitalize="none"
+              spellCheck={false}
+              placeholder="you@company.com"
               required
             />
           </label>

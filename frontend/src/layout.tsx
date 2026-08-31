@@ -25,9 +25,12 @@ import {
   Settings,
   ShieldCheck,
   Users,
+  Volume2,
+  VolumeX,
   X,
 } from "lucide-react";
 import { api, errorMessage } from "./api";
+import { playNotificationChime, setSoundEnabled, soundEnabled } from "./notify";
 import { useAuth } from "./auth";
 import { fmtDateTime } from "./components";
 import { useToast } from "./ui";
@@ -114,7 +117,9 @@ export function AppLayout() {
   }, [location]);
 
   useEffect(() => {
-    const id = setInterval(() => setNow(new Date()), 1000);
+    // Minutes only, so a quarter-minute tick is enough to stay accurate
+    // without re-rendering the header once a second all day.
+    const id = setInterval(() => setNow(new Date()), 15000);
     return () => clearInterval(id);
   }, []);
 
@@ -239,7 +244,6 @@ export function AppLayout() {
               {now.toLocaleTimeString("en-IN", {
                 hour: "2-digit",
                 minute: "2-digit",
-                second: "2-digit",
               })}
             </b>
             <span>
@@ -300,6 +304,7 @@ export function AppLayout() {
  */
 function CategoryBranch({ category }: { category: NavCategory }) {
   const location = useLocation();
+  const { can } = useAuth();
   const base = `/${category.slug}`;
   const onBranch = location.pathname.startsWith(base);
   const [expanded, setExpanded] = useState(onBranch);
@@ -348,6 +353,22 @@ function CategoryBranch({ category }: { category: NavCategory }) {
             <span>All {category.label.toLowerCase()} cases</span>
             {category.total > 0 && <em>{category.total}</em>}
           </Link>
+
+          {/* Each queue imports its own sheet: the two arrive from different
+              desks in different layouts, and mixing them was how rows ended
+              up filed under the wrong kind of case. */}
+          {can("import.create") && (
+            <Link
+              to={`/imports/${category.slug}`}
+              className={
+                location.pathname === `/imports/${category.slug}`
+                  ? "nav-leaf active"
+                  : "nav-leaf"
+              }
+            >
+              <span>Import {category.label.toLowerCase()} cases</span>
+            </Link>
+          )}
 
           {forms.map((form) => {
             const active =
@@ -461,11 +482,16 @@ function NotificationBell() {
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
 
+  const [sound, setSound] = useState(soundEnabled);
+
   const count = useQuery({
     queryKey: ["notifications", "count"],
     queryFn: () =>
       api.get<{ unread: number; total: number }>("/notifications/count").then((r) => r.data),
-    refetchInterval: 60000,
+    // A case moving through the workflow should be audible within seconds,
+    // not at the next minute boundary.
+    refetchInterval: 20000,
+    refetchIntervalInBackground: true,
   });
 
   const list = useQuery({
@@ -495,6 +521,17 @@ function NotificationBell() {
 
   const unread = count.data?.unread ?? 0;
 
+  // Ring only when the number actually grows. The first reading after a
+  // sign-in establishes the baseline, so a backlog of unread items does not
+  // announce itself the moment the app opens.
+  const known = useRef<number | null>(null);
+  useEffect(() => {
+    if (count.data === undefined) return;
+    const previous = known.current;
+    known.current = unread;
+    if (previous !== null && unread > previous) playNotificationChime();
+  }, [unread, count.data]);
+
   return (
     <div className="notification-wrap" ref={ref}>
       <button
@@ -509,6 +546,22 @@ function NotificationBell() {
         <div className="notification-panel">
           <header>
             <b>Notifications</b>
+            <button
+              className="text-link"
+              onClick={() => {
+                const next = !sound;
+                setSound(next);
+                setSoundEnabled(next);
+                if (next) playNotificationChime();
+              }}
+              aria-pressed={sound}
+              aria-label={
+                sound ? "Turn notification sound off" : "Turn notification sound on"
+              }
+              title={sound ? "Sound is on" : "Sound is off"}
+            >
+              {sound ? <Volume2 /> : <VolumeX />}
+            </button>
             {unread > 0 && (
               <button
                 className="text-link"

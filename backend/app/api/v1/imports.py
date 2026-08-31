@@ -12,7 +12,12 @@ from sqlalchemy import select
 from app.api.deps import DbSession, require_permissions
 from app.core.pagination import Page, PageParams, page_params, paginate
 from app.imports.mapping import CANONICAL_FIELDS, FIELD_LABELS
-from app.models.enums import ActivityAction, CasePriority, ImportRowStatus
+from app.models.enums import (
+    ActivityAction,
+    CaseCategory,
+    CasePriority,
+    ImportRowStatus,
+)
 from app.models.importing import ImportBatch, ImportTemplate
 from app.models.user import User
 from app.schemas.common import Message
@@ -111,8 +116,15 @@ async def upload(
     file: Annotated[UploadFile, File(description=".xlsx, .xlsm or .csv")],
     template_id: Annotated[uuid.UUID | None, Form()] = None,
     company_id: Annotated[uuid.UUID | None, Form()] = None,
+    category: Annotated[CaseCategory | None, Form()] = None,
 ) -> ImportPreviewOut:
-    """Upload, parse and validate — nothing is created until you confirm."""
+    """Upload, parse and validate — nothing is created until you confirm.
+
+    ``category`` is the queue the file was dropped into. Death claim and
+    investigation sheets arrive from different desks in different formats, so
+    each screen imports only its own kind and a row from the other queue is
+    reported rather than quietly filed in the wrong place.
+    """
     payload = await file.read()
     batch, mapping, sheet = await import_service.upload_and_validate(
         session,
@@ -121,6 +133,7 @@ async def upload(
         template_id=template_id,
         company_id=company_id,
         actor=user,
+        category=category,
         request=request,
     )
     await session.commit()

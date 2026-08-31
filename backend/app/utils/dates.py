@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import re
 from datetime import UTC, date, datetime, time, timedelta, timezone
+from collections.abc import Iterable
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from app.core.config import settings
@@ -30,6 +31,37 @@ _DATE_PATTERNS: tuple[str, ...] = (
     "%d %B %Y",
     "%b %d, %Y",
     "%B %d, %Y",
+)
+
+#: The same list with the day and month swapped, for sheets written in the
+#: American order. Which of the two is used is decided per file, not per cell:
+#: see ``detect_month_first``.
+_MONTH_FIRST_DATE_PATTERNS: tuple[str, ...] = (
+    "%m-%d-%Y",
+    "%m/%d/%Y",
+    "%m.%d.%Y",
+    "%m-%d-%y",
+    "%m/%d/%y",
+    "%m.%d.%y",
+    "%Y-%m-%d",
+    "%Y/%m/%d",
+    "%d-%b-%Y",
+    "%d %b %Y",
+    "%d-%B-%Y",
+    "%d %B %Y",
+    "%b %d, %Y",
+    "%B %d, %Y",
+)
+
+_MONTH_FIRST_DATETIME_PATTERNS: tuple[str, ...] = (
+    "%m-%d-%Y %H:%M:%S",
+    "%m-%d-%Y %H:%M",
+    "%m/%d/%Y %H:%M:%S",
+    "%m/%d/%Y %H:%M",
+    "%m/%d/%Y %I:%M %p",
+    "%m-%d-%Y %I:%M %p",
+    "%Y-%m-%d %H:%M:%S",
+    "%Y-%m-%dT%H:%M:%S",
 )
 
 _DATETIME_PATTERNS: tuple[str, ...] = (
@@ -96,8 +128,45 @@ def is_blank_token(raw: object) -> bool:
     return text in _NULL_TOKENS
 
 
-def parse_date(raw: object) -> date | None:
-    """Best-effort day-first date parsing. Returns ``None`` when unparseable."""
+_NUMERIC_DATE = re.compile(r"^(\d{1,2})[-/.](\d{1,2})[-/.](\d{2,4})$")
+
+
+def detect_month_first(samples: Iterable[object]) -> bool:
+    """Decide whether a column of dates is written month-first.
+
+    Client sheets disagree: most Indian insurers send ``24-08-2026`` and at
+    least one sends ``8/24/2026``. Guessing per cell is what makes this
+    dangerous — ``8/6/2026`` is a valid date either way, and reading it wrongly
+    silently shifts the aging and the TAT by two months.
+
+    So the whole column decides. A component above twelve can only be a day,
+    which settles the order for every other cell in the file. With no evidence,
+    or with both orders apparently present, the day-first default stands.
+    """
+    day_first_evidence = False
+    month_first_evidence = False
+
+    for sample in samples:
+        if not isinstance(sample, str):
+            continue
+        match = _NUMERIC_DATE.match(sample.strip())
+        if not match:
+            continue
+        first, second = int(match.group(1)), int(match.group(2))
+        if first > 12 >= second:
+            day_first_evidence = True
+        elif second > 12 >= first:
+            month_first_evidence = True
+
+    return month_first_evidence and not day_first_evidence
+
+
+def parse_date(raw: object, *, month_first: bool = False) -> date | None:
+    """Best-effort date parsing. Returns ``None`` when unparseable.
+
+    Day-first unless ``month_first`` is set, which the importer decides once
+    per file from ``detect_month_first``.
+    """
     if raw is None or is_blank_token(raw):
         return None
     if isinstance(raw, datetime):
@@ -115,12 +184,16 @@ def parse_date(raw: object) -> date | None:
     if re.fullmatch(r"\d{5}(\.\d+)?", text):
         return _from_excel_serial(float(text))
 
-    for pattern in _DATETIME_PATTERNS:
+    datetime_patterns = (
+        _MONTH_FIRST_DATETIME_PATTERNS if month_first else _DATETIME_PATTERNS
+    )
+    date_patterns = _MONTH_FIRST_DATE_PATTERNS if month_first else _DATE_PATTERNS
+    for pattern in datetime_patterns:
         try:
             return datetime.strptime(text, pattern).date()
         except ValueError:
             continue
-    for pattern in _DATE_PATTERNS:
+    for pattern in date_patterns:
         try:
             return datetime.strptime(text, pattern).date()
         except ValueError:

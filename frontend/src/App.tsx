@@ -40,6 +40,14 @@ export default function App() {
         <Route path="activity" element={<ActivityLog />} />
         <Route path="cases/:id" element={<CaseDetail />} />
         <Route path="imports" element={<Imports />} />
+        <Route
+          path="imports/investigation"
+          element={<Imports category="INVESTIGATION" />}
+        />
+        <Route
+          path="imports/death-claim"
+          element={<Imports category="DEATH_CLAIM" />}
+        />
         <Route path="staff" element={<StaffPage />} />
         <Route path="staff/:id" element={<StaffDetail />} />
         <Route path="hr" element={<HR />} />

@@ -37,7 +37,23 @@ import type {
   Page,
 } from "../types";
 
-export default function Imports() {
+/** The queue a sheet belongs to, or undefined on the combined screen. */
+export type ImportCategory = "INVESTIGATION" | "DEATH_CLAIM";
+
+const CATEGORY_COPY: Record<ImportCategory, { title: string; subtitle: string }> = {
+  INVESTIGATION: {
+    title: "Import investigation cases",
+    subtitle:
+      "Upload the insurer's investigation sheet. Death claim rows are reported rather than imported here.",
+  },
+  DEATH_CLAIM: {
+    title: "Import death claim cases",
+    subtitle:
+      "Upload the insurer's death claim sheet. Investigation rows are reported rather than imported here.",
+  },
+};
+
+export default function Imports({ category }: { category?: ImportCategory }) {
   const { can } = useAuth();
   const client = useQueryClient();
   const toast = useToast();
@@ -54,6 +70,8 @@ export default function Imports() {
   const canRollback = can("import.rollback");
 
   const list = useQuery({
+    // Import history is one list across both queues — a batch is not filed
+    // under a category, its rows are — so the key does not vary by screen.
     queryKey: ["imports", page],
     enabled: can("import.view"),
     queryFn: () =>
@@ -68,6 +86,9 @@ export default function Imports() {
     mutationFn: async (file: File) => {
       const data = new FormData();
       data.append("file", file);
+      // Sent only from the two dedicated screens; the combined one still
+      // accepts either kind.
+      if (category) data.append("category", category);
       return api
         .post<ImportPreview>("/imports/upload", data)
         .then((r) => r.data);
@@ -143,8 +164,12 @@ export default function Imports() {
   return (
     <>
       <PageHeader
-        title="Daily case import"
-        subtitle="Upload the client file, validate every row, then create cases in one controlled transaction."
+        title={category ? CATEGORY_COPY[category].title : "Daily case import"}
+        subtitle={
+          category
+            ? CATEGORY_COPY[category].subtitle
+            : "Upload the client file, validate every row, then create cases in one controlled transaction."
+        }
       />
 
       {canImport && (

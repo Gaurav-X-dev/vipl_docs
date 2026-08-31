@@ -23,7 +23,7 @@ from fastapi import Request
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core.errors import ConflictError, ValidationError
+from app.core.errors import ConflictError, PermissionDeniedError, ValidationError
 from app.models.case import Case, CaseAssignment, CaseStatusHistory
 from app.models.enums import (
     CLOSED_STATUSES,
@@ -69,6 +69,18 @@ async def submit_to_office(
     manager decides who processes it.
     """
     assert_field_submittable(case.status)
+
+    # Submitting is the investigator's own act. Holding case.view_all — which
+    # every reviewer does — was previously enough to submit somebody else's
+    # case on their behalf.
+    if not (
+        actor.is_super_admin
+        or case.assigned_to_id == actor.id
+        or "case.edit" in actor.permission_codes
+    ):
+        raise PermissionDeniedError(
+            "Only the investigator this case is assigned to can submit it."
+        )
 
     if outcome is not None:
         case.outcome = outcome

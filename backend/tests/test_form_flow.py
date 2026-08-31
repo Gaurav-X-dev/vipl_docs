@@ -218,11 +218,12 @@ class TestFormFlow:
                 else:
                     values[field["field_key"]] = "Recorded during the visit"
 
-        # The case is Assigned, three legal steps short of Submitted.
+        # Assigning a case starts the work, so it is already in WIP here —
+        # two legal steps short of Submitted rather than three.
         detail = await client.get(
             f"{API}/cases/{case['id']}", headers=admin_headers
         )
-        assert detail.json()["status"] == CaseStatus.ASSIGNED.value
+        assert detail.json()["status"] == CaseStatus.WIP.value
 
         submitted = await client.put(
             f"{API}/cases/{case['id']}/form",

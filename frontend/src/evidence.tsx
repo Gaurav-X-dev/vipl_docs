@@ -422,3 +422,215 @@ function useGeolocation(active: boolean) {
     retry: () => setAttempt((n) => n + 1),
   };
 }
+
+/* --------------------------------------------------------------- Bulk photos */
+
+type QueueState = "waiting" | "uploading" | "done" | "failed";
+
+type Queued = {
+  id: string;
+  file: File;
+  preview: string;
+  state: QueueState;
+  error?: string;
+};
+
+/**
+ * Several photographs at once, from the case overview.
+ *
+ * An investigator comes back from a visit with a handful of pictures of the
+ * house, the name plate and the family. Adding them one dialog at a time was
+ * the slowest thing in the app, so this takes the whole set in one go, stamps
+ * every one with the location read once at the start, and reports each file
+ * separately — one rejected photo must not discard the other nine.
+ *
+ * Uploads run one after another rather than all at once: a phone on a village
+ * connection handles a queue far better than ten parallel requests.
+ */
+export function PhotoUploadPanel({
+  caseId,
+  onDone,
+}: {
+  caseId: string;
+  onDone?: () => void;
+}) {
+  const client = useQueryClient();
+  const toast = useToast();
+  const fileRef = useRef<HTMLInputElement>(null);
+
+  const [queue, setQueue] = useState<Queued[]>([]);
+  const [busy, setBusy] = useState(false);
+  const location = useGeolocation(true);
+
+  // Object URLs are revoked when the item leaves the queue, not on every
+  // render, or a long queue leaks a preview per keystroke elsewhere.
+  useEffect(
+    () => () => {
+      queue.forEach((item) => URL.revokeObjectURL(item.preview));
+    },
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [],
+  );
+
+  function add(files: FileList | null) {
+    if (!files?.length) return;
+    const picked = Array.from(files).filter((f) => f.type.startsWith("image/"));
+    const rejected = files.length - picked.length;
+    if (rejected > 0) {
+      toast.error(
+        `${rejected} file${rejected > 1 ? "s were" : " was"} not an image and ${
+          rejected > 1 ? "were" : "was"
+        } skipped.`,
+      );
+    }
+    setQueue((current) => [
+      ...current,
+      ...picked.map((file) => ({
+        id: `${file.name}-${file.size}-${file.lastModified}-${Math.random()}`,
+        file,
+        preview: URL.createObjectURL(file),
+        state: "waiting" as QueueState,
+      })),
+    ]);
+  }
+
+  function remove(id: string) {
+    setQueue((current) => {
+      const going = current.find((item) => item.id === id);
+      if (going) URL.revokeObjectURL(going.preview);
+      return current.filter((item) => item.id !== id);
+    });
+  }
+
+  async function uploadAll() {
+    const pending = queue.filter((item) => item.state !== "done");
+    if (!pending.length) return;
+    setBusy(true);
+    let uploaded = 0;
+
+    for (const item of pending) {
+      setQueue((current) =>
+        current.map((q) => (q.id === item.id ? { ...q, state: "uploading" } : q)),
+      );
+      try {
+        const data = new FormData();
+        data.append("file", item.file);
+        data.append("category", "PHOTOGRAPH");
+        if (location.latitude !== null && location.longitude !== null) {
+          data.append("geo_latitude", location.latitude.toFixed(6));
+          data.append("geo_longitude", location.longitude.toFixed(6));
+        }
+        await api.post(`/cases/${caseId}/documents`, data);
+        uploaded += 1;
+        setQueue((current) =>
+          current.map((q) => (q.id === item.id ? { ...q, state: "done" } : q)),
+        );
+      } catch (failure) {
+        setQueue((current) =>
+          current.map((q) =>
+            q.id === item.id
+              ? { ...q, state: "failed", error: errorMessage(failure) }
+              : q,
+          ),
+        );
+      }
+    }
+
+    setBusy(false);
+    if (uploaded > 0) {
+      client.invalidateQueries({ queryKey: ["case-documents", caseId] });
+      toast.success(
+        `${uploaded} photograph${uploaded > 1 ? "s" : ""} uploaded${
+          location.latitude !== null ? " with location" : ""
+        }.`,
+      );
+      onDone?.();
+    }
+    const failed = queue.length - uploaded;
+    if (failed > 0 && uploaded === 0) {
+      toast.error("None of the photographs could be uploaded.");
+    }
+  }
+
+  const waiting = queue.filter((item) => item.state !== "done").length;
+
+  return (
+    <div className="photo-panel">
+      <input
+        ref={fileRef}
+        type="file"
+        accept="image/*"
+        multiple
+        hidden
+        onChange={(event) => {
+          add(event.target.files);
+          // Reset, so picking the same file twice still fires a change.
+          event.target.value = "";
+        }}
+      />
+
+      <div className="photo-actions">
+        <button
+          type="button"
+          className="secondary"
+          onClick={() => fileRef.current?.click()}
+          disabled={busy}
+        >
+          <UploadCloud /> Add photographs
+        </button>
+        {waiting > 0 && (
+          <button
+            type="button"
+            className="primary"
+            onClick={uploadAll}
+            disabled={busy}
+          >
+            {busy ? "Uploading…" : `Upload ${waiting}`}
+          </button>
+        )}
+      </div>
+
+      <p className={location.latitude !== null ? "photo-geo found" : "photo-geo"}>
+        <MapPin />
+        {location.error
+          ? `No location — ${location.error}`
+          : location.latitude === null
+            ? "Finding your location…"
+            : `Stamped at ${location.latitude.toFixed(5)}, ${location.longitude?.toFixed(5)}`}
+      </p>
+
+      {queue.length === 0 ? (
+        <p className="muted">
+          Choose several at once. Each is stamped with the location above.
+        </p>
+      ) : (
+        <ul className="photo-queue">
+          {queue.map((item) => (
+            <li key={item.id} className={`photo-item ${item.state}`}>
+              <img src={item.preview} alt={item.file.name} />
+              <span className="photo-name">{item.file.name}</span>
+              {item.state === "done" ? (
+                <CircleCheck className="photo-ok" />
+              ) : item.state === "failed" ? (
+                <span className="photo-error" title={item.error}>
+                  <TriangleAlert /> Failed
+                </span>
+              ) : item.state === "uploading" ? (
+                <span className="photo-progress">Uploading…</span>
+              ) : (
+                <button
+                  type="button"
+                  className="photo-remove"
+                  onClick={() => remove(item.id)}
+                  aria-label={`Remove ${item.file.name}`}
+                >
+                  <X />
+                </button>
+              )}
+            </li>
+          ))}
+        </ul>
+      )}
+    </div>
+  );
+}

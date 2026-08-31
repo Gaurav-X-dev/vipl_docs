@@ -17,6 +17,14 @@ class CaseCategory(StrEnum):
     DEATH_CLAIM = "DEATH_CLAIM"
 
 
+#: How each queue is named on screen. One definition, so the sidebar, the
+#: import errors and the case header cannot drift apart.
+CATEGORY_LABELS: dict[CaseCategory, str] = {
+    CaseCategory.INVESTIGATION: "Investigation",
+    CaseCategory.DEATH_CLAIM: "Death Claim",
+}
+
+
 class CaseStatus(StrEnum):
     IMPORTED = "IMPORTED"
     UNASSIGNED = "UNASSIGNED"
@@ -30,6 +38,7 @@ class CaseStatus(StrEnum):
     AWAITING_OFFICE_ASSIGNMENT = "AWAITING_OFFICE_ASSIGNMENT"
     OFFICE_PROCESSING = "OFFICE_PROCESSING"
     UNDER_REVIEW = "UNDER_REVIEW"
+    QUALITY_CHECK = "QUALITY_CHECK"
     CORRECTION_REQUIRED = "CORRECTION_REQUIRED"
     VERIFIED = "VERIFIED"
     COMPLETED = "COMPLETED"
@@ -52,6 +61,7 @@ OPEN_STATUSES: frozenset[CaseStatus] = frozenset(
         CaseStatus.AWAITING_OFFICE_ASSIGNMENT,
         CaseStatus.OFFICE_PROCESSING,
         CaseStatus.UNDER_REVIEW,
+        CaseStatus.QUALITY_CHECK,
         CaseStatus.CORRECTION_REQUIRED,
     }
 )

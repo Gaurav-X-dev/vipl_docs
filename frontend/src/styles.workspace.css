@@ -810,3 +810,199 @@
   background: var(--brand-100);
   color: var(--brand-800);
 }
+
+/* ------------------------------------------------------- Bulk photo upload */
+/* Several pictures queued from the case overview. The queue is a list rather
+   than a gallery: the file name and its outcome matter more than the picture
+   at this point, and a list stays readable on a phone held one-handed. */
+.photo-panel {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-3);
+}
+.photo-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--s-3);
+}
+.photo-geo {
+  display: flex;
+  align-items: center;
+  gap: var(--s-2);
+  margin: 0;
+  font-size: 12.5px;
+  color: var(--ink-3);
+}
+.photo-geo > svg {
+  width: 15px;
+  height: 15px;
+  flex: none;
+}
+.photo-geo.found {
+  color: var(--ok);
+}
+.photo-queue {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-2);
+}
+.photo-item {
+  display: flex;
+  align-items: center;
+  gap: var(--s-3);
+  padding: var(--s-2);
+  border: 1px solid var(--line);
+  border-radius: var(--r-sm);
+  background: var(--surface);
+}
+.photo-item img {
+  width: 44px;
+  height: 44px;
+  flex: none;
+  object-fit: cover;
+  border-radius: 6px;
+  background: var(--surface-2);
+}
+.photo-name {
+  flex: 1;
+  min-width: 0;
+  font-size: 12.5px;
+  color: var(--ink-2);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.photo-item.done {
+  border-color: var(--ok-line);
+  background: var(--ok-bg);
+}
+.photo-item.failed {
+  border-color: var(--alert-line);
+  background: var(--alert-bg);
+}
+.photo-ok {
+  width: 18px;
+  height: 18px;
+  color: var(--ok);
+  flex: none;
+}
+.photo-error,
+.photo-progress {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11.5px;
+  font-weight: 600;
+  flex: none;
+}
+.photo-error {
+  color: var(--alert);
+}
+.photo-error > svg {
+  width: 14px;
+  height: 14px;
+}
+.photo-progress {
+  color: var(--ink-3);
+}
+.photo-remove {
+  flex: none;
+  border: 0;
+  background: none;
+  color: var(--ink-3);
+  cursor: pointer;
+  padding: 6px;
+  border-radius: 6px;
+  line-height: 0;
+}
+.photo-remove:hover {
+  background: var(--surface-2);
+  color: var(--ink);
+}
+.photo-remove svg {
+  width: 15px;
+  height: 15px;
+}
+
+/* --------------------------------------------------------------- On a phone */
+/* Field investigators work from a handset, so the touch surfaces grow and the
+   panels that were sized for a desk become full-width sheets. Driven by the
+   pointer, not only the width: a small window on a laptop still gets the
+   mouse-sized controls. */
+@media (pointer: coarse) {
+  button,
+  .filters select,
+  .filters input,
+  .filters .field input,
+  .filters .field select {
+    min-height: 44px;
+  }
+  .nav-leaf,
+  .nav-form,
+  .tabs button {
+    min-height: 44px;
+  }
+}
+
+@media (max-width: 640px) {
+  /* The topbar is a fixed-height row that does not wrap: menu, clock, shift
+     widget, bell and avatar. On a handset the long date is the first thing
+     that has to go, then the worked-hours read-out. */
+  .topbar {
+    height: 64px;
+    padding: 0 var(--s-3);
+    gap: var(--s-2);
+  }
+  .live-time span {
+    display: none;
+  }
+  .live-time b {
+    font-size: 15px;
+  }
+  .clock-read small {
+    display: none;
+  }
+  .clock-widget {
+    gap: var(--s-2);
+  }
+  .notification-panel {
+    position: fixed;
+    left: var(--s-3);
+    right: var(--s-3);
+    top: 62px;
+    width: auto;
+    max-height: 70vh;
+  }
+  .photo-item img {
+    width: 38px;
+    height: 38px;
+  }
+  /* A dialog on a phone is a sheet: full width, anchored to the bottom, with
+     the action row pinned so it is always reachable. */
+  .modal-root {
+    place-items: end center;
+    padding: 0;
+  }
+  .modal,
+  .modal.wide {
+    width: 100%;
+    max-height: 92vh;
+    border-radius: var(--r-xl) var(--r-xl) 0 0;
+  }
+  .modal-head,
+  .modal-body,
+  .modal-foot {
+    padding-left: var(--s-4);
+    padding-right: var(--s-4);
+  }
+  .modal-foot {
+    position: sticky;
+    bottom: 0;
+  }
+  .modal-foot button {
+    flex: 1;
+  }
+}

@@ -719,6 +719,9 @@ export interface Notification {
 }
 
 /* ------------------------------------------------------------- Options */
+/* Mirrors CaseStatus in backend/app/models/enums.py, in the same order.
+   Two statuses were missing here and never appeared in the status filter,
+   so keep the two lists together when either changes. */
 export const CASE_STATUSES = [
   "IMPORTED",
   "UNASSIGNED",
@@ -729,7 +732,10 @@ export const CASE_STATUSES = [
   "DOCUMENTS_PENDING",
   "RIP",
   "REPORT_SUBMITTED",
+  "AWAITING_OFFICE_ASSIGNMENT",
+  "OFFICE_PROCESSING",
   "UNDER_REVIEW",
+  "QUALITY_CHECK",
   "CORRECTION_REQUIRED",
   "VERIFIED",
   "COMPLETED",
@@ -745,9 +751,12 @@ export const STATUS_LABELS: Record<string, string> = {
   WIP: "Work in Progress (WIP)",
   FIELD_INVESTIGATION: "Field Investigation",
   DOCUMENTS_PENDING: "Documents Pending",
-  RIP: "Report in Progress (RIP)",
+  RIP: "Field Report Drafting",
   REPORT_SUBMITTED: "Submitted by Investigator",
+  AWAITING_OFFICE_ASSIGNMENT: "Awaiting Office Assignment",
+  OFFICE_PROCESSING: "Report in Progress (RIP)",
   UNDER_REVIEW: "Under Review",
+  QUALITY_CHECK: "Quality Check",
   CORRECTION_REQUIRED: "Correction Required",
   VERIFIED: "Verified",
   COMPLETED: "Completed",

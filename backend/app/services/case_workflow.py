@@ -28,11 +28,12 @@ STATUS_LABELS: dict[CaseStatus, str] = {
     CaseStatus.WIP: "Work in Progress (WIP)",
     CaseStatus.FIELD_INVESTIGATION: "Field Investigation",
     CaseStatus.DOCUMENTS_PENDING: "Documents Pending",
-    CaseStatus.RIP: "Report in Progress (RIP)",
+    CaseStatus.RIP: "Field Report Drafting",
     CaseStatus.REPORT_SUBMITTED: "Submitted by Investigator",
     CaseStatus.AWAITING_OFFICE_ASSIGNMENT: "Awaiting Office Assignment",
-    CaseStatus.OFFICE_PROCESSING: "Office Processing",
+    CaseStatus.OFFICE_PROCESSING: "Report in Progress (RIP)",
     CaseStatus.UNDER_REVIEW: "Under Review",
+    CaseStatus.QUALITY_CHECK: "Quality Check",
     CaseStatus.CORRECTION_REQUIRED: "Correction Required",
     CaseStatus.VERIFIED: "Verified",
     CaseStatus.COMPLETED: "Completed",
@@ -54,6 +55,7 @@ STATUS_TONE: dict[CaseStatus, str] = {
     CaseStatus.AWAITING_OFFICE_ASSIGNMENT: "warning",
     CaseStatus.OFFICE_PROCESSING: "info",
     CaseStatus.UNDER_REVIEW: "info",
+    CaseStatus.QUALITY_CHECK: "warning",
     CaseStatus.CORRECTION_REQUIRED: "warning",
     CaseStatus.VERIFIED: "success",
     CaseStatus.COMPLETED: "success",
@@ -66,9 +68,14 @@ TRANSITIONS: dict[CaseStatus, tuple[CaseStatus, ...]] = {
     CaseStatus.IMPORTED: (
         CaseStatus.UNASSIGNED,
         CaseStatus.ASSIGNED,
+        CaseStatus.WIP,
         CaseStatus.CANCELLED,
     ),
-    CaseStatus.UNASSIGNED: (CaseStatus.ASSIGNED, CaseStatus.CANCELLED),
+    CaseStatus.UNASSIGNED: (
+        CaseStatus.ASSIGNED,
+        CaseStatus.WIP,
+        CaseStatus.CANCELLED,
+    ),
     CaseStatus.ASSIGNED: (
         CaseStatus.ACCEPTED,
         CaseStatus.WIP,
@@ -122,6 +129,7 @@ TRANSITIONS: dict[CaseStatus, tuple[CaseStatus, ...]] = {
     ),
     CaseStatus.OFFICE_PROCESSING: (
         CaseStatus.UNDER_REVIEW,
+        CaseStatus.QUALITY_CHECK,
         CaseStatus.CORRECTION_REQUIRED,
         CaseStatus.VERIFIED,
         CaseStatus.AWAITING_OFFICE_ASSIGNMENT,
@@ -129,12 +137,23 @@ TRANSITIONS: dict[CaseStatus, tuple[CaseStatus, ...]] = {
         CaseStatus.CANCELLED,
     ),
     CaseStatus.UNDER_REVIEW: (
+        CaseStatus.QUALITY_CHECK,
+        CaseStatus.VERIFIED,
+        CaseStatus.CORRECTION_REQUIRED,
+        CaseStatus.OFFICE_PROCESSING,
+        CaseStatus.REJECTED,
+    ),
+    # Quality check is the optional detour the admin chooses instead of
+    # completing straight away; it always hands the case back to them.
+    CaseStatus.QUALITY_CHECK: (
+        CaseStatus.UNDER_REVIEW,
         CaseStatus.VERIFIED,
         CaseStatus.CORRECTION_REQUIRED,
         CaseStatus.OFFICE_PROCESSING,
         CaseStatus.REJECTED,
     ),
     CaseStatus.CORRECTION_REQUIRED: (
+        CaseStatus.QUALITY_CHECK,
         CaseStatus.RIP,
         CaseStatus.WIP,
         CaseStatus.FIELD_INVESTIGATION,
@@ -147,6 +166,79 @@ TRANSITIONS: dict[CaseStatus, tuple[CaseStatus, ...]] = {
     CaseStatus.REJECTED: (),
     CaseStatus.CANCELLED: (),
 }
+
+#: Which permission lets somebody move a case *into* each status.
+#:
+#: Without this the status endpoint asked only for ``case.view``, so anyone who
+#: could open a case could also drive it to Completed — past the office stage,
+#: past review and past quality check. Holding any one of the listed codes is
+#: enough; Super Admins bypass the check, and the investigator the case is
+#: assigned to may move it through their own field stage (see
+#: ``ASSIGNEE_MAY_SET``).
+STATUS_PERMISSIONS: dict[CaseStatus, frozenset[str]] = {
+    CaseStatus.IMPORTED: frozenset({"case.edit"}),
+    CaseStatus.UNASSIGNED: frozenset({"case.assign", "case.reassign"}),
+    CaseStatus.ASSIGNED: frozenset({"case.assign", "case.reassign"}),
+    CaseStatus.ACCEPTED: frozenset({"case.edit"}),
+    CaseStatus.WIP: frozenset({"case.edit"}),
+    CaseStatus.FIELD_INVESTIGATION: frozenset({"case.edit"}),
+    CaseStatus.DOCUMENTS_PENDING: frozenset({"case.edit"}),
+    CaseStatus.RIP: frozenset({"case.edit"}),
+    CaseStatus.REPORT_SUBMITTED: frozenset({"case.edit"}),
+    CaseStatus.AWAITING_OFFICE_ASSIGNMENT: frozenset(
+        {"case.assign_office", "case.process_office", "case.edit"}
+    ),
+    CaseStatus.OFFICE_PROCESSING: frozenset({"case.assign_office", "case.process_office"}),
+    # Office staff hand the finished report back to the admin themselves.
+    CaseStatus.UNDER_REVIEW: frozenset({"case.process_office", "case.review"}),
+    CaseStatus.QUALITY_CHECK: frozenset({"case.review"}),
+    CaseStatus.CORRECTION_REQUIRED: frozenset({"case.review"}),
+    CaseStatus.VERIFIED: frozenset({"case.review"}),
+    CaseStatus.REJECTED: frozenset({"case.review"}),
+    CaseStatus.COMPLETED: frozenset({"case.complete"}),
+    CaseStatus.CANCELLED: frozenset({"case.delete"}),
+}
+
+#: Statuses the assigned investigator may set on their own case without
+#: holding a wider editing permission. Their whole job is to move a case
+#: through these.
+#: Spelled out rather than derived from FIELD_STAGE_STATUSES, which is
+#: defined further down this module. It is that set minus ASSIGNED, plus
+#: REPORT_SUBMITTED: an investigator works and submits their own case, but
+#: assigning it is somebody else's decision.
+ASSIGNEE_MAY_SET: frozenset[CaseStatus] = frozenset(
+    {
+        CaseStatus.ACCEPTED,
+        CaseStatus.WIP,
+        CaseStatus.FIELD_INVESTIGATION,
+        CaseStatus.DOCUMENTS_PENDING,
+        CaseStatus.RIP,
+        CaseStatus.REPORT_SUBMITTED,
+    }
+)
+
+
+def may_set_status(
+    target: CaseStatus,
+    *,
+    permission_codes: set[str] | frozenset[str],
+    is_super_admin: bool = False,
+    is_assignee: bool = False,
+    is_office_staff: bool = False,
+) -> bool:
+    """Whether this person is allowed to move a case into ``target``."""
+    if is_super_admin:
+        return True
+    if is_assignee and target in ASSIGNEE_MAY_SET:
+        return True
+    # The office staff member the case sits with may return it for review.
+    if is_office_staff and target in {
+        CaseStatus.UNDER_REVIEW,
+        CaseStatus.OFFICE_PROCESSING,
+    }:
+        return True
+    return bool(STATUS_PERMISSIONS.get(target, frozenset()) & set(permission_codes))
+
 
 #: Image 2: "report in progress -> if done -> negative / positive / suspicious".
 #: A report cannot leave the investigator's hands without an outcome.
@@ -290,9 +382,14 @@ def path_to(current: CaseStatus, target: CaseStatus) -> list[CaseStatus]:
 
 
 def status_after_assignment(current: CaseStatus) -> CaseStatus:
-    """Assignment moves an unworked case to Assigned and leaves live work alone."""
-    if current in {CaseStatus.IMPORTED, CaseStatus.UNASSIGNED}:
-        return CaseStatus.ASSIGNED
+    """Assignment puts the case straight into Work in Progress.
+
+    The agency treats handing a case to an investigator as the work starting:
+    there is no waiting room between the two, and a separate Assigned state
+    only produced a column nobody acted on. Live work is left alone.
+    """
+    if current in {CaseStatus.IMPORTED, CaseStatus.UNASSIGNED, CaseStatus.ASSIGNED}:
+        return CaseStatus.WIP
     return current
 
 

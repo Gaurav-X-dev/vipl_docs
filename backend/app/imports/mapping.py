@@ -156,13 +156,13 @@ def resolve_mapping(
     return resolved
 
 
-def coerce(value: Any, data_type: str) -> Any:
+def coerce(value: Any, data_type: str, *, month_first: bool = False) -> Any:
     """Convert one cell to the declared type. Returns ``None`` for blanks."""
     if is_blank_token(value):
         return None
 
     if data_type == "date":
-        return parse_date(value)
+        return parse_date(value, month_first=month_first)
 
     if data_type == "int":
         try:
@@ -182,15 +182,25 @@ def coerce(value: Any, data_type: str) -> Any:
 
 
 def extract_row(
-    raw: dict[str, Any], mapping: ResolvedMapping, template: ImportTemplate
+    raw: dict[str, Any],
+    mapping: ResolvedMapping,
+    template: ImportTemplate,
+    *,
+    month_first: bool = False,
 ) -> dict[str, Any]:
-    """Apply the mapping to one raw row, producing internal field values."""
+    """Apply the mapping to one raw row, producing internal field values.
+
+    ``month_first`` is decided once for the whole file rather than per cell —
+    see ``detect_month_first``.
+    """
     types = {m.target_field: m.data_type for m in template.mappings}
     parsed: dict[str, Any] = {}
     for header, target in mapping.header_to_field.items():
         if not target:
             continue
-        parsed[target] = coerce(raw.get(header), types.get(target, "text"))
+        parsed[target] = coerce(
+            raw.get(header), types.get(target, "text"), month_first=month_first
+        )
     return parsed
 
 
