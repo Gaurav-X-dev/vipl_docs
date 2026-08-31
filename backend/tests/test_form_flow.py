@@ -245,6 +245,64 @@ class TestFormFlow:
         assert CaseStatus.WIP.value in moved
         assert CaseStatus.RIP.value in moved
 
+    async def test_submitting_the_form_ends_the_field_stage(
+        self, client: AsyncClient, admin_headers
+    ):
+        """Both routes out of the field must leave the same mark.
+
+        Submit to Office stamped field_submitted_at; submitting the form did
+        not, although it reaches the same status. The case screen reads that
+        stamp to decide the field stage is over, so it kept offering Submit to
+        Office on an already-submitted case — which the server then refused.
+        """
+        case = await self._case_with_form(client, admin_headers, "Field Stage Done")
+        form = await client.get(
+            f"{API}/cases/{case['id']}/form", headers=admin_headers
+        )
+
+        values: dict[str, str] = {}
+        for section in form.json()["template"]["sections"]:
+            for field in section["fields"]:
+                if not field["is_required"]:
+                    continue
+                mapping = field.get("document_mapping")
+                if mapping == "outcome":
+                    values[field["field_key"]] = "Positive"
+                elif mapping == "report_status":
+                    values[field["field_key"]] = "Final"
+                elif field["field_type"] == "DATE":
+                    values[field["field_key"]] = "2026-08-28"
+                elif field["field_type"] in {"SELECT", "RADIO"}:
+                    values[field["field_key"]] = str((field.get("options") or ["Yes"])[0])
+                elif field["field_type"] == "YES_NO_NA":
+                    values[field["field_key"]] = "YES"
+                else:
+                    values[field["field_key"]] = "Recorded during the visit"
+
+        submitted = await client.put(
+            f"{API}/cases/{case['id']}/form",
+            json={"values": values, "submit": True},
+            headers=admin_headers,
+        )
+        assert submitted.status_code == 200, submitted.text
+
+        detail = await client.get(
+            f"{API}/cases/{case['id']}", headers=admin_headers
+        )
+        body = detail.json()
+        assert body["status"] == CaseStatus.REPORT_SUBMITTED.value
+        assert body["field_submitted_at"] is not None, (
+            "the field stage is over, so the case screen must be able to see it"
+        )
+
+        # And the office hand-off is now the action on offer, not another submit.
+        refused = await client.post(
+            f"{API}/cases/{case['id']}/submit-to-office",
+            json={"outcome": "POSITIVE"},
+            headers=admin_headers,
+        )
+        assert refused.status_code == 409, refused.text
+
 
 class TestAttendanceAcrossSessions:
     """A second shift in one day must not blow up on mixed timestamps.

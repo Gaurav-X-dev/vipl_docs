@@ -13,6 +13,7 @@ import {
   fmtDateTime,
 } from "./components";
 import { Field, Modal, SelectInput, TextArea, TextInput, useToast } from "./ui";
+import { FIELD_STAGE_OVER } from "./types";
 import type { CaseDetail, StageAssignment } from "./types";
 
 const VISIT_STATES = [
@@ -58,7 +59,8 @@ export function WorkflowTab({
         .then((r) => r.data),
   });
 
-  const fieldDone = Boolean(c.field_submitted_at);
+  const fieldDone =
+    Boolean(c.field_submitted_at) || FIELD_STAGE_OVER.includes(c.status);
   const officeStarted = Boolean(c.office_assigned_at);
   const finished = ["COMPLETED", "VERIFIED"].includes(c.status);
 

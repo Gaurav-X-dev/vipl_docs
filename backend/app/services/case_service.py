@@ -38,6 +38,7 @@ from app.models.enums import (
     NotificationType,
     ReportStatus,
     TatState,
+    VisitStatus,
 )
 from app.models.user import User
 from app.schemas.case import CaseCreate, CaseFilters, CaseUpdate
@@ -729,6 +730,13 @@ async def change_status(
         case.started_at = now
     if target == CaseStatus.REPORT_SUBMITTED:
         case.submitted_at = now
+        # Submitting the form reaches this status too, not only the Submit to
+        # Office button. Both have to leave the same mark: the case screen
+        # decides whether the field stage is over by looking at this, and
+        # without it the button stayed on offer for a case already submitted.
+        if case.field_submitted_at is None:
+            case.field_submitted_at = now
+            case.visit_status = VisitStatus.SUBMITTED_TO_OFFICE
     if target == CaseStatus.VERIFIED:
         case.verified_at = now
         case.reviewed_by_id = actor.id
@@ -798,6 +806,21 @@ async def change_status(
             link=_case_link(case),
             entity_type="Case",
             entity_id=str(case.id),
+        )
+
+    # Submitting from the form hands the case to the office queue just as the
+    # Submit to Office button does, so it has to raise the same flag.
+    if target == CaseStatus.REPORT_SUBMITTED:
+        await notification_service.notify_permission_holders(
+            session,
+            permission="case.assign_office",
+            notification_type=NotificationType.SYSTEM,
+            title=f"Case {case.case_number} awaiting office assignment",
+            body=f"{case.company.short_name} — {case.life_assured_name}",
+            link=_case_link(case),
+            entity_type="Case",
+            entity_id=str(case.id),
+            exclude_user_id=actor.id,
         )
 
     # The review and quality-check steps hand the case back to "an admin"

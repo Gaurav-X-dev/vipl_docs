@@ -764,6 +764,21 @@ export const STATUS_LABELS: Record<string, string> = {
   CANCELLED: "Cancelled",
 };
 
+/* Statuses in which the case has left the field investigator. Older cases
+   reached these without field_submitted_at being stamped, so the screens check
+   the status as well as the stamp before offering "Submit to office". */
+export const FIELD_STAGE_OVER: readonly string[] = [
+  "REPORT_SUBMITTED",
+  "AWAITING_OFFICE_ASSIGNMENT",
+  "OFFICE_PROCESSING",
+  "UNDER_REVIEW",
+  "QUALITY_CHECK",
+  "VERIFIED",
+  "COMPLETED",
+  "REJECTED",
+  "CANCELLED",
+];
+
 export const OUTCOMES = ["POSITIVE", "NEGATIVE", "SUSPICIOUS"] as const;
 export const PRIORITIES = ["LOW", "NORMAL", "HIGH", "URGENT"] as const;
 export const STAFF_CATEGORIES = ["FIELD", "BACK_OFFICE", "MANAGEMENT"] as const;

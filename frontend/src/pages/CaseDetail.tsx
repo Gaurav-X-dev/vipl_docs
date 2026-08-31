@@ -44,6 +44,7 @@ import {
   useToast,
 } from "../ui";
 import {
+  FIELD_STAGE_OVER,
   OUTCOMES,
   PRIORITIES,
   STATUS_LABELS,
@@ -252,7 +253,7 @@ export default function CaseDetail() {
                 </button>
               )}
             {can("case.assign_office") &&
-              c.field_submitted_at &&
+              (c.field_submitted_at || FIELD_STAGE_OVER.includes(c.status)) &&
               !["COMPLETED", "VERIFIED", "CANCELLED", "REJECTED"].includes(
                 c.status,
               ) && (
@@ -263,9 +264,8 @@ export default function CaseDetail() {
               )}
             {can("investigation.edit") &&
               !c.field_submitted_at &&
-              !["IMPORTED", "UNASSIGNED", "COMPLETED", "VERIFIED"].includes(
-                c.status,
-              ) && (
+              !FIELD_STAGE_OVER.includes(c.status) &&
+              !["IMPORTED", "UNASSIGNED"].includes(c.status) && (
                 <button
                   className="primary"
                   onClick={() => setDialog("submit-office")}
