@@ -26,7 +26,7 @@ from app.imports.mapping import (
     extract_row,
     resolve_mapping,
 )
-from app.models.case import Case
+from app.models.case import Case, CaseDocument, CaseNote
 from app.models.company import CaseType, Company
 from app.models.enums import (
     CLOSED_STATUSES,
@@ -35,10 +35,13 @@ from app.models.enums import (
     CaseCategory,
     CasePriority,
     CaseStatus,
+    FieldSource,
     ImportBatchStatus,
     ImportRowStatus,
     NotificationType,
 )
+from app.models.document import GeneratedDocument
+from app.models.form import CaseFieldValue, CaseForm
 from app.models.hr import Employee
 from app.models.importing import ImportBatch, ImportColumnMapping, ImportRow, ImportTemplate
 from app.models.user import User
@@ -101,6 +104,9 @@ class ResolverCache:
     def __init__(self) -> None:
         self.companies: dict[str, Company] = {}
         self.case_types: dict[str, CaseType] = {}
+        #: (company key, label key) -> case type, for wording that means one
+        #: thing to one insurer and something else to another.
+        self.company_case_types: dict[tuple[str, str], CaseType] = {}
         self.users: dict[str, User] = {}
 
     async def load(self, session: AsyncSession) -> None:
@@ -113,7 +119,17 @@ class ResolverCache:
         case_types = (await session.execute(select(CaseType))).scalars().all()
         for case_type in case_types:
             for token in {case_type.code, case_type.name, *case_type.alias_list}:
-                if token:
+                if not token:
+                    continue
+                # "PNB:Retail" scopes the wording to one insurer. PNB's sheet
+                # says Retail where another company might mean something else
+                # entirely, so these must not become global aliases.
+                company_code, _, label = token.partition(":")
+                if label:
+                    self.company_case_types[
+                        (normalise_key(company_code), normalise_key(label))
+                    ] = case_type
+                else:
                     self.case_types[normalise_key(token)] = case_type
 
         result = await session.execute(select(User).options(selectinload(User.employee)))
@@ -129,17 +145,20 @@ class ResolverCache:
         return self.companies.get(normalise_key(raw)) if clean(raw) else None
 
     def case_type(self, raw: Any, company: Company | None = None) -> CaseType | None:
-        # ICICI's supplied LMS document is its new-business/pre-issuance form.
-        # Their daily sheet uses the broader "Pre Issuance" label, so route it
-        # to the attachment-derived company-specific case type before applying
-        # the global aliases.
-        if company is not None and company.code == "ICICI":
-            token = normalise_key(raw)
-            if token in {"preissuance", "preissuanceverification", "piv"}:
-                routed = self.case_types.get(normalise_key("NEW_BUSINESS_VERIFICATION"))
-                if routed is not None:
-                    return routed
-        return self.case_types.get(normalise_key(raw)) if clean(raw) else None
+        """Resolve the sheet's wording, preferring what it means to this insurer."""
+        if not clean(raw):
+            return None
+        token = normalise_key(raw)
+
+        if company is not None:
+            for company_token in (company.code, company.short_name, company.name):
+                if not company_token:
+                    continue
+                scoped = self.company_case_types.get((normalise_key(company_token), token))
+                if scoped is not None:
+                    return scoped
+
+        return self.case_types.get(token)
 
     def user(self, raw: Any) -> User | None:
         return self.users.get(normalise_key(raw)) if clean(raw) else None
@@ -626,6 +645,47 @@ async def commit_batch(
     return batch, created_ids
 
 
+async def _cases_with_real_work(
+    session: AsyncSession, case_ids: list[uuid.UUID]
+) -> set[uuid.UUID]:
+    """Which of these cases somebody has actually worked on.
+
+    Judged by what a person left behind, not by the status. Importing with
+    auto-assign now puts a case straight into Work in Progress, so a status
+    check alone declared every freshly imported case "already worked" and made
+    the whole batch impossible to roll back — the opposite of what the status
+    means here.
+
+    Bank-supplied values are excluded: those came from the very file being
+    rolled back.
+    """
+    if not case_ids:
+        return set()
+
+    worked: set[uuid.UUID] = set()
+
+    # Anything typed into the investigation form.
+    rows = await session.execute(
+        select(CaseForm.case_id)
+        .join(CaseFieldValue, CaseFieldValue.case_form_id == CaseForm.id)
+        .where(
+            CaseForm.case_id.in_(case_ids),
+            CaseFieldValue.source != FieldSource.BANK_SUPPLIED,
+        )
+        .distinct()
+    )
+    worked.update(rows.scalars().all())
+
+    # Evidence, notes and generated reports each mean somebody was here.
+    for model in (CaseDocument, CaseNote, GeneratedDocument):
+        rows = await session.execute(
+            select(model.case_id).where(model.case_id.in_(case_ids)).distinct()
+        )
+        worked.update(rows.scalars().all())
+
+    return worked
+
+
 async def rollback_batch(
     session: AsyncSession,
     batch_id: uuid.UUID,
@@ -644,11 +704,8 @@ async def rollback_batch(
     result = await session.execute(select(Case).where(Case.import_batch_id == batch.id))
     cases = list(result.scalars().all())
 
-    blocked = [
-        case.case_number
-        for case in cases
-        if case.status not in {CaseStatus.IMPORTED, CaseStatus.UNASSIGNED, CaseStatus.ASSIGNED}
-    ]
+    worked = await _cases_with_real_work(session, [case.id for case in cases])
+    blocked = [case.case_number for case in cases if case.id in worked]
     if blocked:
         raise ConflictError(
             "This batch cannot be rolled back because work has already started on "

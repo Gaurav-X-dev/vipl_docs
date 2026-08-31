@@ -42,7 +42,7 @@ COMPANIES: tuple[CompanySeed, ...] = (
         "Bharti AXA Life Insurance Company Limited",
         "Bharti AXA Life",
         CompanyType.INSURANCE,
-        ("BAXA", "Bharti AXA", "Bharti Axa Life"),
+        ("BAXA", "BXA", "Bharti AXA", "Bharti Axa Life"),
     ),
     CompanySeed(
         "BANDHAN",
@@ -127,6 +127,11 @@ CASE_TYPES: tuple[CaseTypeSeed, ...] = (
             "Project Verification",
             "Physical Verification",
             "Post Verification",
+            # Bandhan and Canara HSBC both file these against their
+            # pre-issuance form; scoped so "Post Issuance" does not become a
+            # global synonym for its own opposite.
+            "BANDHAN:Post Issuance",
+            "HSBC:Post Issuance",
         ),
         display_order=10,
     ),
@@ -135,7 +140,15 @@ CASE_TYPES: tuple[CaseTypeSeed, ...] = (
         "Pre-Claim Verification",
         CaseCategory.INVESTIGATION,
         "Early-claim verification of the life assured's profile and existence.",
-        ("Pre Claim", "Pre-Claim", "Preclaim", "Early Claim"),
+        (
+            "Pre Claim",
+            "Pre-Claim",
+            "Preclaim",
+            "Early Claim",
+            # Each insurer's own word for the work its one form covers.
+            "PNBMET:Retail",
+            "KOTAK:PIPV",
+        ),
         display_order=20,
     ),
     CaseTypeSeed(
@@ -166,7 +179,7 @@ CASE_TYPES: tuple[CaseTypeSeed, ...] = (
         "Payout Verification",
         CaseCategory.INVESTIGATION,
         "Confirmation of the customer and address before a payout is released.",
-        ("Payout", "Payout Verification", "Pay Out"),
+        ("Payout", "Payout Verification", "Pay Out", "ICICI:Policy Assignment"),
         default_tat_days=5,
         display_order=50,
     ),
@@ -175,7 +188,17 @@ CASE_TYPES: tuple[CaseTypeSeed, ...] = (
         "Customer Verification – New Business",
         CaseCategory.INVESTIGATION,
         "New-business customer verification captured in the client's LMS format.",
-        ("LMS", "New Business Verification", "Customer Verification", "Manual Report"),
+        (
+            "LMS",
+            "New Business Verification",
+            "Customer Verification",
+            "Manual Report",
+            # ICICI's LMS document is their pre-issuance form. This used to be
+            # hard-coded in the resolver; it belongs with the other wording.
+            "ICICI:Pre Issuance",
+            "ICICI:Pre-Issuance",
+            "ICICI:PIV",
+        ),
         display_order=60,
     ),
     CaseTypeSeed(
@@ -192,7 +215,25 @@ CASE_TYPES: tuple[CaseTypeSeed, ...] = (
         "Death Claim Investigation",
         CaseCategory.DEATH_CLAIM,
         "Full death / critical illness / hospital rider claim investigation.",
-        ("Death Claim", "Death", "Claim Investigation", "Complete Investigation"),
+        (
+            "Death Claim",
+            "Death",
+            "Claim Investigation",
+            "Complete Investigation",
+            # The pendency sheet's own vocabulary. "Claim" alone is what most
+            # of its rows say; DC is the agency's shorthand for death claim.
+            "Claim",
+            "DC",
+            "DC Verification",
+            "Health Claim",
+            # A government life scheme, so still a death claim.
+            "PMJJY",
+            "PMJJBY",
+            # Not investigations in themselves, but there is no separate form
+            # for them and the sheet tracks them against the same case.
+            "Document Procurement",
+            "KOTAK:Runner Boy",
+        ),
         default_tat_days=21,
         display_order=10,
     ),

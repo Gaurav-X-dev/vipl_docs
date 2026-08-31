@@ -145,3 +145,180 @@ def _first_errors(preview: dict, limit: int = 3) -> list[str]:
             if len(messages) >= limit:
                 return messages
     return messages
+
+
+# --------------------------------------------------------------------------- #
+# The master pendency sheets
+# --------------------------------------------------------------------------- #
+#: Every company/case-type pair in the two master sheets the agency actually
+#: works from, with the number of rows each accounted for. 158 of 350 rows in
+#: the new-business sheet were rejected because five of these labels existed
+#: nowhere in the seed, so they are pinned here rather than left to be
+#: rediscovered by a client.
+NEW_BUSINESS_PAIRS = [
+    ("Aditya Birla", "Physical Verification", "PRE_ISSUANCE", 23),
+    ("Aditya Birla", "Post Verification", "PRE_ISSUANCE", 55),
+    ("Aditya Birla", "Project Verification", "PRE_ISSUANCE", 4),
+    ("BXA", "Pre Claim", "PRE_CLAIM", 27),
+    ("Bajaj", "Pre Issuance", "PRE_ISSUANCE", 24),
+    ("Bandhan", "Post Issuance", "PRE_ISSUANCE", 14),
+    ("Bandhan", "Pre Issuance", "PRE_ISSUANCE", 1),
+    ("HDFC", "Profile Check", "PROFILE_CHECK", 41),
+    ("HSBC", "Post Issuance", "PRE_ISSUANCE", 3),
+    ("HSBC", "Pre Issuance", "PRE_ISSUANCE", 3),
+    ("ICICI", "ADD", "PROFILE_CHECK", 35),
+    ("ICICI", "Discreet Check", "DISCREET_CHECK", 1),
+    ("ICICI", "Payout", "PAYOUT_VERIFICATION", 5),
+    ("ICICI", "Policy Assignment", "PAYOUT_VERIFICATION", 1),
+    ("Kotak", "PIPV", "PRE_CLAIM", 11),
+    ("PNB", "Retail", "PRE_CLAIM", 102),
+]
+
+DEATH_CLAIM_PAIRS = [
+    ("Bajaj", "Claim", 6),
+    ("Bajaj", "DC Verification", 2),
+    ("Bandhan", "Claim", 1),
+    ("HDFC", "Claim", 21),
+    ("HDFC", "Document Procurement", 2),
+    ("ICICI", "Claim", 8),
+    ("ICICI", "Document Procurement", 1),
+    ("ICICI", "Health Claim", 2),
+    ("ICICI", "PMJJY", 2),
+    ("Kotak", "Claim", 37),
+    ("Kotak", "Document Procurement", 1),
+    ("Kotak", "Runner Boy", 4),
+    ("SUD Life", "Claim", 3),
+    ("SUD Life", "DC Verification", 2),
+    ("SUD Life", "PMJJY", 3),
+]
+
+
+@pytest.mark.anyio
+class TestMasterSheetVocabulary:
+    """Every word the two master sheets use must resolve to a form."""
+
+    async def _cache(self, seeded):
+        from app.services.import_service import ResolverCache
+
+        async with seeded() as session:
+            cache = ResolverCache()
+            await cache.load(session)
+            return cache
+
+    async def test_new_business_sheet_resolves_completely(self, db, seeded):
+        cache = await self._cache(seeded)
+        unresolved: list[str] = []
+        for company_label, type_label, expected_code, rows in NEW_BUSINESS_PAIRS:
+            company = cache.company(company_label)
+            if company is None:
+                unresolved.append(f"{rows} rows: company '{company_label}'")
+                continue
+            case_type = cache.case_type(type_label, company)
+            if case_type is None:
+                unresolved.append(
+                    f"{rows} rows: case type '{type_label}' for {company.short_name}"
+                )
+                continue
+            assert case_type.code == expected_code, (
+                f"'{type_label}' for {company.short_name} went to "
+                f"{case_type.code}, expected {expected_code}"
+            )
+        assert unresolved == [], unresolved
+
+    async def test_death_claim_sheet_resolves_completely(self, db, seeded):
+        cache = await self._cache(seeded)
+        unresolved: list[str] = []
+        for company_label, type_label, rows in DEATH_CLAIM_PAIRS:
+            company = cache.company(company_label)
+            if company is None:
+                unresolved.append(f"{rows} rows: company '{company_label}'")
+                continue
+            case_type = cache.case_type(type_label, company)
+            if case_type is None:
+                unresolved.append(
+                    f"{rows} rows: case type '{type_label}' for {company.short_name}"
+                )
+                continue
+            assert case_type.category.value == "DEATH_CLAIM", (
+                f"'{type_label}' for {company.short_name} is filed as "
+                f"{case_type.category.value}"
+            )
+        assert unresolved == [], unresolved
+
+    async def test_company_scoped_wording_stays_scoped(self, db, seeded):
+        """"Retail" means something to PNB. It must not leak to everyone."""
+        cache = await self._cache(seeded)
+        pnb = cache.company("PNB")
+        hdfc = cache.company("HDFC")
+        assert cache.case_type("Retail", pnb) is not None
+        assert cache.case_type("Retail", hdfc) is None
+        assert cache.case_type("Retail", None) is None
+
+        kotak = cache.company("Kotak")
+        assert cache.case_type("Runner Boy", kotak) is not None
+        assert cache.case_type("Runner Boy", hdfc) is None
+
+
+@pytest.mark.anyio
+class TestRollbackAfterAssignment:
+    """Assigning a case must not make its batch unrollbackable.
+
+    Importing with auto-assign now puts cases straight into Work in Progress.
+    A rollback rule that read the status alone then refused every fresh batch —
+    "work has already started" on cases nobody had touched.
+    """
+
+    async def _committed_batch(self, client: AsyncClient, headers):
+        response = await upload(client, headers, category="INVESTIGATION")
+        batch_id = response.json()["batch"]["id"]
+        commit = await client.post(
+            f"{API}/imports/{batch_id}/commit",
+            json={"skip_duplicates": True, "auto_assign": False},
+            headers=headers,
+        )
+        assert commit.status_code == 200, commit.text
+        return batch_id, commit.json()["created_case_ids"]
+
+    async def test_an_assigned_but_untouched_batch_rolls_back(
+        self, client: AsyncClient, admin_headers
+    ):
+        batch_id, case_ids = await self._committed_batch(client, admin_headers)
+        me = await client.get(f"{API}/auth/me", headers=admin_headers)
+
+        assigned = await client.post(
+            f"{API}/cases/{case_ids[0]}/assign",
+            json={"assigned_to_id": me.json()["id"]},
+            headers=admin_headers,
+        )
+        assert assigned.status_code == 200, assigned.text
+
+        detail = await client.get(f"{API}/cases/{case_ids[0]}", headers=admin_headers)
+        assert detail.json()["status"] == "WIP", "assignment should start the work"
+
+        rolled = await client.post(
+            f"{API}/imports/{batch_id}/rollback", headers=admin_headers
+        )
+        assert rolled.status_code == 200, rolled.text
+
+        gone = await client.get(f"{API}/cases/{case_ids[0]}", headers=admin_headers)
+        assert gone.status_code == 404
+
+    async def test_a_batch_with_real_work_still_refuses(
+        self, client: AsyncClient, admin_headers
+    ):
+        batch_id, case_ids = await self._committed_batch(client, admin_headers)
+        case_id = case_ids[0]
+
+        # A note is the cheapest thing a person can leave behind.
+        note = await client.post(
+            f"{API}/cases/{case_id}/notes",
+            json={"body": "Spoke to the neighbour.", "is_internal": True},
+            headers=admin_headers,
+        )
+        assert note.status_code == 201, note.text
+
+        refused = await client.post(
+            f"{API}/imports/{batch_id}/rollback", headers=admin_headers
+        )
+        assert refused.status_code == 409, refused.text
+        assert "work has already started" in refused.text
