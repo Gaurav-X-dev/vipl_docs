@@ -4,11 +4,13 @@ import {
   CheckCircle2,
   Copy,
   FileSpreadsheet,
+  HeartPulse,
   RotateCcw,
+  ShieldCheck,
   UploadCloud,
   XCircle,
 } from "lucide-react";
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import { api, download, errorMessage } from "../api";
 import { useAuth } from "../auth";
@@ -54,6 +56,12 @@ const CATEGORY_COPY: Record<ImportCategory, { title: string; subtitle: string }>
 };
 
 export default function Imports({ category }: { category?: ImportCategory }) {
+  const [queue, setQueue] = useState<ImportCategory>(category ?? "INVESTIGATION");
+
+  // Following a sidebar link to the other queue has to move the control too.
+  useEffect(() => {
+    if (category) setQueue(category);
+  }, [category]);
   const { can } = useAuth();
   const client = useQueryClient();
   const toast = useToast();
@@ -86,9 +94,7 @@ export default function Imports({ category }: { category?: ImportCategory }) {
     mutationFn: async (file: File) => {
       const data = new FormData();
       data.append("file", file);
-      // Sent only from the two dedicated screens; the combined one still
-      // accepts either kind.
-      if (category) data.append("category", category);
+      data.append("category", queue);
       return api
         .post<ImportPreview>("/imports/upload", data)
         .then((r) => r.data);
@@ -164,13 +170,32 @@ export default function Imports({ category }: { category?: ImportCategory }) {
   return (
     <>
       <PageHeader
-        title={category ? CATEGORY_COPY[category].title : "Daily case import"}
-        subtitle={
-          category
-            ? CATEGORY_COPY[category].subtitle
-            : "Upload the client file, validate every row, then create cases in one controlled transaction."
-        }
+        title={CATEGORY_COPY[queue].title}
+        subtitle={CATEGORY_COPY[queue].subtitle}
       />
+
+      {canImport && (
+        <div className="queue-switch" role="tablist" aria-label="Which kind of sheet">
+          {(["INVESTIGATION", "DEATH_CLAIM"] as const).map((option) => (
+            <button
+              key={option}
+              role="tab"
+              aria-selected={queue === option}
+              className={queue === option ? "active" : ""}
+              onClick={() => {
+                if (option === queue) return;
+                setQueue(option);
+                // A preview checked against one queue says nothing about the
+                // other, so it goes rather than sitting there looking valid.
+                setPreview(null);
+              }}
+            >
+              {option === "INVESTIGATION" ? <ShieldCheck /> : <HeartPulse />}
+              {option === "INVESTIGATION" ? "Investigation" : "Death Claim"}
+            </button>
+          ))}
+        </div>
+      )}
 
       {canImport && (
         <Card className="upload-card">

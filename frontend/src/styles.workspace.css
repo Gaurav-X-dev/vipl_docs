@@ -1006,3 +1006,55 @@
     flex: 1;
   }
 }
+
+/* ------------------------------------------------------- Import queue switch */
+/* Death claim and investigation sheets are imported separately. The two used
+   to be reachable only from inside collapsed sidebar branches, where nobody
+   found them; this puts the choice on the screen people already open. */
+.queue-switch {
+  display: flex;
+  gap: var(--s-2);
+  margin-bottom: var(--s-5);
+  padding: var(--s-1);
+  background: var(--surface-2);
+  border: 1px solid var(--line);
+  border-radius: var(--r-md);
+  width: fit-content;
+  max-width: 100%;
+  flex-wrap: wrap;
+}
+.queue-switch button {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--s-2);
+  border: 1px solid transparent;
+  background: none;
+  color: var(--ink-2);
+  font-size: 13.5px;
+  font-weight: 600;
+  padding: var(--s-2) var(--s-4);
+  border-radius: var(--r-sm);
+  cursor: pointer;
+}
+.queue-switch button svg {
+  width: 16px;
+  height: 16px;
+}
+.queue-switch button:hover {
+  color: var(--ink);
+}
+.queue-switch button.active {
+  background: var(--surface);
+  border-color: var(--line);
+  color: var(--brand-800);
+  box-shadow: 0 1px 2px rgba(10, 32, 61, 0.06);
+}
+@media (max-width: 640px) {
+  .queue-switch {
+    width: 100%;
+  }
+  .queue-switch button {
+    flex: 1;
+    justify-content: center;
+  }
+}
