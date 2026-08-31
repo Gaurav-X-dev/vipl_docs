@@ -303,6 +303,53 @@ class TestRollbackAfterAssignment:
         gone = await client.get(f"{API}/cases/{case_ids[0]}", headers=admin_headers)
         assert gone.status_code == 404
 
+    async def test_a_prefilled_assignee_is_not_somebody_else_s_work(
+        self, client: AsyncClient, admin_headers
+    ):
+        """The case that actually broke on the live server.
+
+        When the sheet names an assignee, templates prefill fields such as
+        "Field Executive Name" from it — and those fields declare their source
+        as INVESTIGATION, not BANK_SUPPLIED. Filtering on the source therefore
+        counted the import's own values as staff work, and the 24 rows whose
+        Assign To column was filled blocked the whole batch from being rolled
+        back.
+        """
+        me = await client.get(f"{API}/auth/me", headers=admin_headers)
+        assignee = me.json()["email"]
+
+        # Put that assignee into every row, which is what the master sheet does.
+        lines = CLIENT_SHEET.strip().splitlines()
+        header, body = lines[0], lines[1:]
+        column = header.split(",").index("Assign To")
+        rows = []
+        for line in body:
+            cells = line.split(",")
+            cells[column] = assignee
+            rows.append(",".join(cells))
+        sheet = "\n".join([header, *rows]) + "\n"
+
+        response = await upload(client, admin_headers, body=sheet, category="INVESTIGATION")
+        assert response.status_code == 201, response.text
+        batch_id = response.json()["batch"]["id"]
+
+        commit = await client.post(
+            f"{API}/imports/{batch_id}/commit",
+            json={"skip_duplicates": True, "auto_assign": True},
+            headers=admin_headers,
+        )
+        assert commit.status_code == 200, commit.text
+        created = commit.json()["created_case_ids"]
+        assert created, "the sheet should have produced cases"
+
+        rolled = await client.post(
+            f"{API}/imports/{batch_id}/rollback", headers=admin_headers
+        )
+        assert rolled.status_code == 200, rolled.text
+
+        gone = await client.get(f"{API}/cases/{created[0]}", headers=admin_headers)
+        assert gone.status_code == 404
+
     async def test_a_batch_with_real_work_still_refuses(
         self, client: AsyncClient, admin_headers
     ):

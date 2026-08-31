@@ -8,8 +8,8 @@ but never ambiguous: day-first always wins over month-first.
 from __future__ import annotations
 
 import re
-from datetime import UTC, date, datetime, time, timedelta, timezone
 from collections.abc import Iterable
+from datetime import UTC, date, datetime, time, timedelta, timezone
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from app.core.config import settings

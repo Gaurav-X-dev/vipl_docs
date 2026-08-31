@@ -12,7 +12,7 @@ from datetime import UTC, date, datetime
 from typing import Any
 
 from fastapi import Request
-from sqlalchemy import func, select
+from sqlalchemy import func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
@@ -28,19 +28,18 @@ from app.imports.mapping import (
 )
 from app.models.case import Case, CaseDocument, CaseNote
 from app.models.company import CaseType, Company
+from app.models.document import GeneratedDocument
 from app.models.enums import (
+    CATEGORY_LABELS,
     CLOSED_STATUSES,
     AuditAction,
-    CATEGORY_LABELS,
     CaseCategory,
     CasePriority,
     CaseStatus,
-    FieldSource,
     ImportBatchStatus,
     ImportRowStatus,
     NotificationType,
 )
-from app.models.document import GeneratedDocument
 from app.models.form import CaseFieldValue, CaseForm
 from app.models.hr import Employee
 from app.models.importing import ImportBatch, ImportColumnMapping, ImportRow, ImportTemplate
@@ -646,7 +645,7 @@ async def commit_batch(
 
 
 async def _cases_with_real_work(
-    session: AsyncSession, case_ids: list[uuid.UUID]
+    session: AsyncSession, case_ids: list[uuid.UUID], batch_id: uuid.UUID
 ) -> set[uuid.UUID]:
     """Which of these cases somebody has actually worked on.
 
@@ -656,21 +655,26 @@ async def _cases_with_real_work(
     the whole batch impossible to roll back — the opposite of what the status
     means here.
 
-    Bank-supplied values are excluded: those came from the very file being
-    rolled back.
+    Form values are matched on the batch that wrote them rather than on their
+    source. A prefilled value takes its source from the template field, and
+    some templates declare something other than BANK_SUPPLIED, so filtering by
+    source counted the import's own values as somebody's work.
     """
     if not case_ids:
         return set()
 
     worked: set[uuid.UUID] = set()
 
-    # Anything typed into the investigation form.
+    # Anything in the form that this import did not put there.
     rows = await session.execute(
         select(CaseForm.case_id)
         .join(CaseFieldValue, CaseFieldValue.case_form_id == CaseForm.id)
         .where(
             CaseForm.case_id.in_(case_ids),
-            CaseFieldValue.source != FieldSource.BANK_SUPPLIED,
+            or_(
+                CaseFieldValue.import_batch_id.is_(None),
+                CaseFieldValue.import_batch_id != batch_id,
+            ),
         )
         .distinct()
     )
@@ -704,7 +708,7 @@ async def rollback_batch(
     result = await session.execute(select(Case).where(Case.import_batch_id == batch.id))
     cases = list(result.scalars().all())
 
-    worked = await _cases_with_real_work(session, [case.id for case in cases])
+    worked = await _cases_with_real_work(session, [case.id for case in cases], batch.id)
     blocked = [case.case_number for case in cases if case.id in worked]
     if blocked:
         raise ConflictError(
